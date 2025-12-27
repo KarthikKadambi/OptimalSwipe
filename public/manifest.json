@@ -2,7 +2,7 @@
     "name": "OptimalSwipe",
     "short_name": "OptimalSwipe",
     "description": "Never guess which card to use again. Get instant recommendations to maximize rewards on every purchase.",
-    "start_url": "/",
+    "start_url": "/OptimalSwipe/",
     "display": "standalone",
     "background_color": "#0a0e1a",
     "theme_color": "#f4c430",

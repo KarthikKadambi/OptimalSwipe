@@ -16,8 +16,8 @@ export default defineConfig({
         description: 'Never guess which card to use again. Get instant recommendations to maximize rewards on every purchase.',
         theme_color: '#f4c430',
         background_color: '#0a0e1a',
-        scope: '/',
-        start_url: '/',
+        scope: '/OptimalSwipe/',
+        start_url: '/OptimalSwipe/',
         display: 'standalone',
         icons: [
           {
