@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptimalSwipe - Smart Credit Card Manager</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#f4c430">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./src/style.css">
+</head>
+
+<body>
+    <div id="updateBanner" class="update-banner" style="display: none;">
+        <span>New version available!</span>
+        <button id="reloadBtn" class="btn btn-sync">Update Now</button>
+    </div>
+    <div class="container">
+        <header>
+            <h1>OptimalSwipe</h1>
+            <div
+                style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <p class="tagline">SMART CARD RECOMMENDATIONS</p>
+                <div class="privacy-badge">
+                    <span class="icon">🛡️</span> 100% LOCAL & PRIVATE
+                </div>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <nav class="side-nav">
+                <button class="tab-btn active" data-tab="recommend">
+                    <span class="icon">🎯</span> Recommendation
+                </button>
+                <button class="tab-btn" data-tab="payment">
+                    <span class="icon">💵</span> Record Transactions
+                </button>
+                <button class="tab-btn" data-tab="history">
+                    <span class="icon">📊</span> Transaction History
+                </button>
+
+                <div class="nav-group">
+                    <div class="nav-header">Presets</div>
+                    <button class="tab-btn sub-item" data-tab="add-preset">
+                        <span class="icon">➕</span> Add Presets
+                    </button>
+                    <button class="tab-btn sub-item" data-tab="show-presets">
+                        <span class="icon">🖼️</span> Show Presets
+                    </button>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-header">Cards</div>
+                    <button class="tab-btn sub-item" data-tab="add-card">
+                        <span class="icon">➕</span> Add Cards
+                    </button>
+                    <button class="tab-btn sub-item" data-tab="my-cards">
+                        <span class="icon">💳</span> My Cards
+                    </button>
+                </div>
+
+                <button class="tab-btn" data-tab="vault">
+                    <span class="icon">⚙️</span> Settings
+                </button>
+            </nav>
+
+            <main class="tab-content">
+                <!-- Smart Recommendation Section -->
+                <div id="recommend" class="tab-pane active">
+                    <div class="card">
+                        <h2><span class="icon">🎯</span> Get Smart Recommendation</h2>
+                        <form id="recommendationForm">
+                            <div class="criteria-section">
+                                <div class="form-group">
+                                    <label>Purchase Category</label>
+                                    <input type="text" id="recCategory" placeholder="e.g., dining, travel, groceries"
+                                        required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Purchase Amount</label>
+                                    <input type="number" id="recAmount" step="0.01" placeholder="0.00" required>
+                                </div>
+                            </div>
+                            <div class="criteria-section">
+                                <div class="form-group">
+                                    <label>Payment Method Available</label>
+                                    <select id="recPaymentMethod">
+                                        <option value="any">Any method</option>
+                                        <option value="apple-pay">Apple Pay</option>
+                                        <option value="google-pay">Google Pay</option>
+                                        <option value="physical-card">Physical card only</option>
+                                        <option value="tap">Tap/contactless</option>
+                                        <option value="online">Online payment</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Specific Merchant (Optional)</label>
+                                    <input type="text" id="recMerchant" placeholder="e.g., Uber, Starbucks, Target">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Additional Context (Optional)</label>
+                                <textarea id="recContext"
+                                    placeholder="e.g., international travel, need travel insurance"></textarea>
+                            </div>
+                            <button type="submit" class="btn">Get Best Card Recommendation</button>
+                        </form>
+                        <div id="recommendationResult" style="margin-top: 24px;"></div>
+                    </div>
+                </div>
+
+                <!-- Record Payment Section -->
+                <div id="payment" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">💵</span> Record Payment</h2>
+                        <form id="paymentForm">
+                            <div class="form-group">
+                                <label>Amount</label>
+                                <input type="number" id="paymentAmount" step="0.01" placeholder="0.00" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Category</label>
+                                <input type="text" id="paymentCategory" placeholder="e.g., Dining, Travel, Groceries"
+                                    required>
+                            </div>
+                            <div class="form-group">
+                                <label>Card Used</label>
+                                <select id="paymentCard" required>
+                                    <option value="">Select a card...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Payment Method</label>
+                                <select id="paymentMethod" required>
+                                    <option value="swipe">Card Swipe</option>
+                                    <option value="apple-pay">Apple Pay</option>
+                                    <option value="google-pay">Google Pay</option>
+                                    <option value="paypal">PayPal</option>
+                                    <option value="cash">Cash</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn">Record Payment</button>
+                        </form>
+                        <div class="stats-grid" style="margin-top: 24px;">
+                            <div class="stat-box">
+                                <div class="stat-value" id="totalSpent">$0</div>
+                                <div class="stat-label">Total Spent</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-value" id="totalPayments">0</div>
+                                <div class="stat-label">Payments</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Payments Section -->
+                <div id="history" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">📊</span> Recent Payments</h2>
+                        <div id="paymentsList"></div>
+                    </div>
+                </div>
+
+                <!-- Add Presets (Template Creator) Section -->
+                <div id="add-preset" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">✨</span> Create New Card Preset</h2>
+                        <p class="description">Define a reusable card template with custom reward categories. These will
+                            appear in the Preset Library and Onboarding.</p>
+                        <form id="presetForm">
+                            <div class="form-group">
+                                <label for="presetName">Card Name</label>
+                                <input type="text" id="presetName" placeholder="e.g. Sapphire Preferred" required>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="presetIssuer">Issuer</label>
+                                    <input type="text" id="presetIssuer" placeholder="e.g. Chase" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="presetColor">Card Color</label>
+                                    <input type="color" id="presetColor" value="#2563eb">
+                                </div>
+                            </div>
+                            <div id="presetRewardTiers">
+                                <div class="reward-tier-header">Reward Categories</div>
+                                <!-- Dynamic reward tiers here -->
+                            </div>
+                            <button type="button" id="addPresetRewardBtn" class="btn-secondary"
+                                style="margin-top: 12px; width: 100%;">
+                                ➕ Add Category
+                            </button>
+                            <button type="submit" class="btn" style="margin-top: 24px; width: 100%;">Save to
+                                Library</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Show Presets (Library) Section -->
+                <div id="show-presets" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">📚</span> Preset Library</h2>
+                        <p class="description">Browse and add specialized cards to your wallet instantly.</p>
+                        <div id="presetLibraryGrid" class="preset-grid">
+                            <!-- Populated by main.js -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add Card Section -->
+                <div id="add-card" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">💳</span> Add Credit Card</h2>
+                        <div class="preset-nudge"
+                            style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">
+                            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
+                                Want to add a popular card? Save time by using our preset library.
+                            </p>
+                            <button class="btn-secondary tab-btn" data-tab="show-presets" style="width: 100%;">
+                                <span class="icon">🖼️</span> Browse Preset Library
+                            </button>
+                        </div>
+                        <form id="cardForm">
+                            <div class="form-group">
+                                <label>Card Name</label>
+                                <input type="text" id="cardName" placeholder="e.g., Apple Card" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Card Issuer</label>
+                                <input type="text" id="cardIssuer" placeholder="e.g., Goldman Sachs" required>
+                            </div>
+                            <div
+                                style="margin: 24px 0; padding: 20px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid var(--accent-gold);">
+                                <h3
+                                    style="font-size: 1.1rem; margin-bottom: 16px; color: var(--accent-gold); font-family: 'Playfair Display', serif;">
+                                    Rewards Structure</h3>
+                                <div id="rewardsContainer"></div>
+                                <button type="button" class="btn-secondary" id="addRewardBtn"
+                                    style="margin-top: 12px; width: 100%; padding: 10px;">+ Add Reward Tier</button>
+                            </div>
+                            <div class="form-group">
+                                <label>Additional Benefits & Perks</label>
+                                <textarea id="cardPerks"
+                                    placeholder="e.g., No annual fee, No foreign transaction fees, Purchase protection, Extended warranty, Travel insurance, Roadside assistance"
+                                    rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn">Add Card</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- My Cards Section -->
+                <div id="my-cards" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">🗂️</span> My Cards</h2>
+                        <div id="cardsList"></div>
+                    </div>
+                </div>
+
+                <!-- Vault (Data Management) Section -->
+                <div id="vault" class="tab-pane">
+                    <div class="card">
+                        <h2><span class="icon">⚙️</span> Settings & Data Vault</h2>
+
+                        <div class="vault-section"
+                            style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
+                            <h3>💾 Local Storage Reliability</h3>
+                            <p class="description">OptimalSwipe stores all data directly in your browser's secure
+                                database. Depending on your browser, this data can be in one of two modes:</p>
+                            <ul class="description"
+                                style="margin-top: 8px; margin-bottom: 8px; list-style-type: none; padding-left: 0;">
+                                <li>🏠 <strong>Persistent:</strong> The gold standard. The browser guarantees your data
+                                    won't be cleared during automatic cleanup to save space.</li>
+                                <li>📦 <strong>Best Effort:</strong> The default. The browser may delete this data if
+                                    your device runs very low on storage.</li>
+                            </ul>
+                            <p class="description"><strong>Tip:</strong> If you see "Best Effort," try choosing "Add to
+                                Home Screen" (PWA) to help the browser grant Persistent status. Regular backups are
+                                always recommended.</p>
+                            <div id="storageHealth" class="storage-health">
+                                <!-- Populated by main.js -->
+                            </div>
+                        </div>
+
+                        <div class="vault-section"
+                            style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
+                            <h3>🔄 Universal Live Sync (All Platforms)</h3>
+                            <p class="description">Link a local file on your device. Every change you make is instantly
+                                saved. This works across all devices and browsers.</p>
+                            <div id="vaultSyncArea">
+                                <!-- Populated by main.js -->
+                            </div>
+                        </div>
+
+                        <div class="vault-section"
+                            style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
+                            <h3>🍎 iOS Integration (Exclusive)</h3>
+                            <p class="description">Connect with the Apple Wallet via our custom iOS Shortcut.
+                                <strong>Note:</strong> This feature is only available for iPhone and iPad users.
+                            </p>
+                            <div id="backupStatus">
+                                <!-- Populated by main.js -->
+                            </div>
+                        </div>
+
+                        <div class="vault-section"
+                            style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
+                            <h3>📤 One-Time Export</h3>
+                            <p class="description">Download a snapshot of your data right now. Use this for a manual
+                                backup
+                                or to move your data to another browser.</p>
+                            <button id="vaultExportBtn" class="btn-secondary">Download JSON Backup</button>
+                        </div>
+
+                        <div class="vault-section"
+                            style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
+                            <h3>🗄️ Storage Reliability</h3>
+                            <p class="description">Request the browser to never delete your local data even if storage
+                                is
+                                low.</p>
+                            <div id="storageHealth" style="margin-bottom: 16px;">
+                                <!-- Populated by main.js -->
+                            </div>
+                            <button id="requestPersistenceBtn" class="btn-secondary">Verify & Protect Local
+                                Storage</button>
+                            <div id="pwaStatus" style="margin-top: 12px; font-size: 0.8rem; color: var(--text-muted);">
+                                <!-- Populated by main.js -->
+                            </div>
+                        </div>
+
+                        <div class="vault-section">
+                            <h3>📥 One-Time Restore</h3>
+                            <p class="description">Import a previously exported backup file to replace your current
+                                local data. Use this for recovery or one-time migrations. <strong>Warning:</strong> This
+                                will overwrite all current local cards.</p>
+                            <label for="vaultImportFile" class="btn-secondary"
+                                style="display: inline-block; cursor: pointer;">Select Backup File</label>
+                            <input type="file" id="vaultImportFile" accept=".json" style="display: none;">
+                        </div>
+                        <div class="vault-section"
+                            style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
+                            <h3>🛡️ Security</h3>
+                            <p class="description">Protect your wallet with biometric authentication. When enabled,
+                                OptimalSwipe will require FaceID or TouchID every time you open the app.</p>
+                            <div id="securityStatusArea">
+                                <!-- Populated by main.js -->
+                            </div>
+                        </div>
+
+                        <div class="vault-section" style="margin-top: 32px;">
+                            <h3>⚠️ Reset App & Data</h3>
+                            <p class="description"><strong>DANGER:</strong> This will permanently wipe all local cards,
+                                payments, and custom presets from this browser. This does <strong>not</strong> delete
+                                your linked backup file, but it will disconnect you from it. Use this to start totally
+                                fresh.</p>
+                            <button id="resetAppBtn" class="btn-danger">
+                                <span class="icon">🗑️</span> Wipe Data & Re-Onboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+        <script type="module" src="./src/main.js"></script>
+</body>
+
+</html>
