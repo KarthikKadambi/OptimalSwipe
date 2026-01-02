@@ -11,6 +11,14 @@ let presetRewardTierCount = 0;
 let lastNotifiedTransactionCount = 0;
 let onboardingCompleted = false;
 
+// Utility: Detect mobile device - Optimized to avoid forced reflows
+const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        mobileMediaQuery.matches ||
+        (navigator.maxTouchPoints > 0 && /Macintosh/.test(navigator.userAgent));
+}
+
 // Initialize app
 async function init() {
     await loadData();
@@ -22,56 +30,64 @@ async function init() {
         if (biometricEnabled) {
             showLockoutScreen();
         } else {
-            startApp();
+            await startApp();
+            // Initial check for file updates
+            await checkSyncStatus();
         }
     }
 }
 
 async function startApp() {
+    // Primary Render
     renderCards();
-    renderPresetsLibrary();
     renderPayments();
     updatePaymentCardOptions();
     updateStats();
 
-    // Request persistent storage for transaction safety
-    await storage.requestPersistence();
-    updateStorageHealthUI();
-    updateBackupStatusUI();
+    // Secondary/Background Tasks
+    const secondaryTasks = async () => {
+        renderPresetsLibrary();
+        await storage.requestPersistence();
+        updateStorageHealthUI();
+        updateBackupStatusUI();
+        registerServiceWorker();
+        checkDeepLinkImport();
+        addRewardTier();
 
-    // Register PWA Service Worker with update detection
-    registerServiceWorker();
+        // Set up events that don't need to be immediate
+        document.getElementById('addRewardBtn').addEventListener('click', addRewardTier);
+        document.getElementById('cardForm').addEventListener('submit', handleCardSubmit);
+        document.getElementById('paymentForm').addEventListener('submit', handlePaymentSubmit);
+        document.getElementById('recommendationForm').addEventListener('submit', handleRecommendationSubmit);
+        document.getElementById('exportBtn')?.addEventListener('click', () => storage.exportData());
+        document.getElementById('vaultExportBtn')?.addEventListener('click', () => storage.exportData());
+        document.getElementById('vaultImportFile')?.addEventListener('change', handleImport);
+        document.getElementById('addPresetRewardBtn').addEventListener('click', () => addPresetRewardTier());
+    };
 
-    // Check for Deep Link Imports (e.g., from iOS Shortcuts)
-    checkDeepLinkImport();
-
-    // Add initial reward tier
-    addRewardTier();
-
-    // Set up event listeners
-    document.getElementById('addRewardBtn').addEventListener('click', addRewardTier);
-    document.getElementById('cardForm').addEventListener('submit', handleCardSubmit);
-    document.getElementById('paymentForm').addEventListener('submit', handlePaymentSubmit);
-    document.getElementById('recommendationForm').addEventListener('submit', handleRecommendationSubmit);
-    document.getElementById('exportBtn')?.addEventListener('click', () => storage.exportData());
-    document.getElementById('importFile')?.addEventListener('change', handleImport);
-    document.getElementById('vaultExportBtn')?.addEventListener('click', () => storage.exportData());
-    document.getElementById('vaultImportFile')?.addEventListener('change', handleImport);
-    document.getElementById('addPresetRewardBtn').addEventListener('click', () => addPresetRewardTier());
+    if (window.requestIdleCallback) {
+        requestIdleCallback(() => secondaryTasks());
+    } else {
+        setTimeout(secondaryTasks, 100);
+    }
     document.getElementById('presetForm').addEventListener('submit', handlePresetSubmit);
 
     // Backup & Sync listeners
     document.addEventListener('click', async (e) => {
         if (e.target.id === 'linkBackupBtn') {
             const handle = await storage.linkBackupFile();
-            if (handle) updateBackupStatusUI();
-        }
-        if (e.target.id === 'syncBackupBtn') {
-            const result = await storage.syncToLinkedFile();
-            if (result.success) {
+            if (handle) {
+                // If it's a native handle (Chrome), we should also pull once
+                if (!handle.isFallback) {
+                    await storage.pullFromLinkedFile();
+                }
+
+                // Refresh everything
+                await loadData();
+                renderCards();
+                renderPayments();
+                updateStats();
                 updateBackupStatusUI();
-            } else {
-                alert('Sync failed: ' + result.error);
             }
         }
         if (e.target.id === 'unlinkVaultBtn') {
@@ -80,9 +96,8 @@ async function startApp() {
                 updateBackupStatusUI();
             }
         }
-        if (e.target.id === 'syncWalletBtn') {
-            // Trigger iOS Shortcut via URL scheme
-            window.location.href = 'shortcuts://run-shortcut?name=SyncOptimalSwipe';
+        if (e.target.id === 'importFromClipboardBtn') {
+            await handleClipboardImport();
         }
 
         // Tab Switching Logic
@@ -105,7 +120,95 @@ async function startApp() {
             }
             updateStorageHealthUI();
         }
+        if (e.target.id === 'mobileShareBackupBtn') {
+            await handleMobileShareBackup();
+        }
+        const syncBtn = e.target.closest('#syncBackupBtn');
+        if (syncBtn) {
+            const result = await storage.syncToLinkedFile();
+            if (result.success) {
+                updateBackupStatusUI();
+                if (result.isManual) {
+                    alert('Backup file generated! Please save it to your local folder, overwriting the old one if needed.');
+                }
+            } else {
+                alert('Sync failed: ' + result.error);
+            }
+        }
+
+        const pullBtn = e.target.closest('#pullSyncBtn');
+        if (pullBtn) {
+            // SYNC check for API support to maintain user gesture context for Safari
+            if (storage.supportsFileSystemApi()) {
+                // For Chrome/Edge, we can use the async pull logic
+                const result = await storage.pullFromLinkedFile();
+                if (result.success) {
+                    await loadData();
+                    renderCards();
+                    renderPayments();
+                    updateStats();
+                    updateBackupStatusUI();
+                    alert('Success: Data pulled from linked file.');
+                } else {
+                    alert('Pull failed: ' + result.error);
+                }
+            } else {
+                // For Safari/Firefox, trigger the hidden import input IMMEDIATELY
+                // Awaiting anything before this can break Safari's security rules for file inputs
+                document.getElementById('vaultImportFile').click();
+            }
+        }
+
+        if (e.target.closest('#viewShortcutGuideBtn')) {
+            showShortcutGuide();
+        }
     });
+
+    // Special handler for the vault import file to ensure it refreshes the UI properly
+    document.getElementById('vaultImportFile').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            try {
+                await storage.importData(file);
+                await loadData();
+                renderCards();
+                renderPayments();
+                updateStats();
+                updateBackupStatusUI();
+                alert('Import successful! Your dashboard has been updated.');
+            } catch (err) {
+                alert('Import failed: ' + err.message);
+            }
+            e.target.value = ''; // Reset
+        }
+    });
+
+    // Check for external file changes when app returns to focus
+    window.addEventListener('focus', () => {
+        checkSyncStatus();
+    });
+}
+
+// Check if the linked file has been modified externally and prompt to pull
+async function checkSyncStatus() {
+    const hasChanges = await storage.checkForExternalChanges();
+    if (hasChanges) {
+        const info = await storage.getBackupStatus();
+        if (confirm(`A newer version of your vault (${info.fileName}) was detected. Would you like to sync those changes into your app?`)) {
+            const result = await storage.pullFromLinkedFile();
+            if (result.success) {
+                // Refresh local data
+                await loadData();
+                renderCards();
+                renderPayments();
+                updateStats();
+                updateBackupStatusUI();
+                alert('Sync complete! Your data is now up-to-date with your linked file.');
+            } else {
+                alert('Sync failed: ' + result.error);
+            }
+        }
+    }
 }
 
 function switchTab(tabId) {
@@ -170,8 +273,8 @@ function addRewardTier() {
         </div>
         <div class="condition-method-grid">
             <div>
-                <label class="inline-label">Payment Method</label>
-                <select class="tier-method">
+                <label for="tier-method-${rewardTierCount}" class="inline-label">Payment Method</label>
+                <select id="tier-method-${rewardTierCount}" class="tier-method">
                     <option value="any">Any method</option>
                     <option value="apple-pay">Apple Pay required</option>
                     <option value="google-pay">Google Pay required</option>
@@ -181,18 +284,18 @@ function addRewardTier() {
                 </select>
             </div>
             <div>
-                <label class="inline-label">Specific Merchants (Optional)</label>
-                <input type="text" placeholder="e.g., Apple, Nike, Uber" class="tier-merchants">
+                <label for="tier-merchants-${rewardTierCount}" class="inline-label">Specific Merchants (Optional)</label>
+                <input type="text" id="tier-merchants-${rewardTierCount}" placeholder="e.g., Apple, Nike, Uber" class="tier-merchants">
             </div>
         </div>
         <div class="condition-method-grid" style="margin-top: 12px;">
             <div>
-                <label class="inline-label">Spending Cap</label>
-                <input type="number" step="0.01" placeholder="e.g., 2500" class="tier-cap">
+                <label for="tier-cap-${rewardTierCount}" class="inline-label">Spending Cap</label>
+                <input type="number" id="tier-cap-${rewardTierCount}" step="0.01" placeholder="e.g., 2500" class="tier-cap">
             </div>
             <div>
-                <label class="inline-label">Cap Period</label>
-                <select class="tier-cap-period">
+                <label for="tier-cap-period-${rewardTierCount}" class="inline-label">Cap Period</label>
+                <select id="tier-cap-period-${rewardTierCount}" class="tier-cap-period">
                     <option value="none">No cap (unlimited)</option>
                     <option value="quarterly">Per Quarter</option>
                     <option value="annual">Per Year</option>
@@ -489,16 +592,23 @@ async function updateBackupStatusUI() {
     const timeAgo = status.lastBackupTime ? getTimeAgo(status.lastBackupTime) : 'Never';
     const isNudgeNeeded = status.pendingTransactions >= 5 || (Date.now() - status.lastBackupTime > 7 * 24 * 60 * 60 * 1000 && status.lastBackupTime > 0);
 
-    // Wallet Sync Nudge logic: more than 4 hours since last sync
-    const isWalletSyncNeeded = (Date.now() - status.lastWalletSyncTime) > 4 * 60 * 60 * 1000;
-
     // iOS Specific UI
     if (container) {
         container.innerHTML = `
             <div class="backup-status">
                 <div class="backup-info">
                     <div class="backup-time">Last Wallet Sync: ${status.lastWalletSyncTime ? getTimeAgo(status.lastWalletSyncTime) : 'Never'}</div>
-                    ${isWalletSyncNeeded ? `<div id="syncWalletBtn" class="backup-nudge" style="cursor: pointer; color: var(--accent-sapphire); text-decoration: underline;">🔄 Sync Wallet via Shortcut</div>` : '<div class="sync-badge">✓ Sync Up-to-Date</div>'}
+                    <div style="margin-top: 12px; padding: 12px; background: rgba(244, 196, 48, 0.1); border-radius: 8px; border-left: 3px solid var(--accent-gold);">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: var(--accent-gold);">📋 How to Sync from Apple Wallet:</div>
+                        <ol style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary);">
+                            <li>Run your iOS Shortcut to copy wallet data</li>
+                            <li>Return to this app</li>
+                            <li>Tap the button below to import</li>
+                        </ol>
+                    </div>
+                    <button id="importFromClipboardBtn" class="btn" style="width: 100%; margin-top: 12px;">
+                        📋 Import from Clipboard
+                    </button>
                 </div>
             </div>
         `;
@@ -520,21 +630,47 @@ async function updateBackupStatusUI() {
         `;
 
         if (status.isLinked) {
-            vaultHtml += `
-                <button id="syncBackupBtn" class="btn" style="width: 100%;">Sync to Local File (${status.pendingTransactions} pending)</button>
-                <div style="margin-top: 8px; text-align: center;">
-                    <button id="unlinkVaultBtn" class="btn-danger" style="font-size: 0.8rem; padding: 6px 16px;">Unlink Vault</button>
-                </div>
-            `;
-        } else if (storage.supportsFileSystemApi()) {
+            if (status.isNative) {
+                // CHROME/EDGE: True Automatic Sync
+                vaultHtml += `
+                    <div style="padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-emerald); border-radius: 8px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-emerald); font-weight: 600; font-size: 0.85rem;">
+                            <span>✨ Live Sync Active</span>
+                        </div>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">Your linked file is updated instantly in the background.</p>
+                    </div>
+                    <button id="syncBackupBtn" class="btn" style="width: 100%;">🔄 Sync Now (${status.pendingTransactions} pending)</button>
+                    <div style="margin-top: 12px; text-align: center;">
+                        <button id="unlinkVaultBtn" class="btn-danger" style="font-size: 0.8rem; padding: 6px 16px;">Unlink Vault</button>
+                    </div>
+                `;
+            } else {
+                // SAFARI/FIREFOX: Managed Backup (Manual Push/Pull)
+                const pullTimeText = status.lastPullTime ? getTimeAgo(status.lastPullTime) : 'Never';
+                vaultHtml += `
+                    <div style="padding: 12px; background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--border); border-radius: 8px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; color: var(--accent-gold); font-weight: 600; font-size: 0.85rem;">
+                            <span>💡 Pro Tip</span>
+                            <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">Refreshed: ${pullTimeText}</span>
+                        </div>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">Tap <strong>Pull Updates</strong> after mobile purchases to sync your iCloud data.</p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="syncBackupBtn" class="btn" style="flex: 1; font-size: 0.8rem;">📤 Push Changes</button>
+                        <button id="pullSyncBtn" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">📥 Pull Updates</button>
+                    </div>
+                    <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 12px; text-align: center;">
+                        <span class="icon">ℹ️</span> Safari/Firefox: Choose "Replace" when saving to overwrite.
+                    </p>
+                    <div style="margin-top: 8px; text-align: center;">
+                        <button id="unlinkVaultBtn" class="btn-danger" style="font-size: 0.8rem; padding: 6px 16px;">Unlink Vault</button>
+                    </div>
+                `;
+            }
+        } else {
+            // Enable linking for all desktop browsers (even those without native API via fallback)
             vaultHtml += `
                 <button id="linkBackupBtn" class="btn-secondary" style="width: 100%;">Link Local Backup File</button>
-            `;
-        } else {
-            vaultHtml += `
-                <div style="font-size: 0.8rem; padding: 12px; background: rgba(255,255,255,0.02); border: 1px dashed var(--border); border-radius: 8px; color: var(--text-secondary); text-align: center;">
-                    Automatic file linking is not available on mobile browsers. Use <strong>One-Time Restore</strong> for migrations.
-                </div>
             `;
         }
         vaultHtml += `</div>`;
@@ -696,11 +832,79 @@ function handleBatchImport(batch) {
     document.getElementById('confirmImport').onclick = async () => {
         await processBatchImport(batch);
         overlay.remove();
-        alert(`Successfully imported ${batch.length} transactions!`);
     };
 }
 
+async function handleClipboardImport() {
+    try {
+        let clipboardText = '';
+
+        // Check if Clipboard API is available
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            try {
+                clipboardText = await navigator.clipboard.readText();
+            } catch (clipError) {
+                // Clipboard API failed, fall back to prompt
+                console.warn('Clipboard API not available, using prompt fallback');
+                clipboardText = null;
+            }
+        }
+
+        // Fallback for iOS PWA: Use prompt
+        if (!clipboardText) {
+            clipboardText = prompt(
+                'Paste the transaction data from your Shortcut:\n\n' +
+                '(After running your iOS Shortcut, the data should be copied. ' +
+                'Long-press in the box below and tap "Paste")'
+            );
+        }
+
+        if (!clipboardText || clipboardText.trim() === '') {
+            alert('No data provided. Please copy transaction data from your iOS Shortcut first.');
+            return;
+        }
+
+        // Try to parse as JSON
+        let batch;
+        try {
+            batch = JSON.parse(clipboardText);
+        } catch (e) {
+            alert('Invalid data format. Please ensure the iOS Shortcut copied valid JSON data.');
+            return;
+        }
+
+        // Normalize to array
+        if (!Array.isArray(batch)) {
+            batch = [batch];
+        }
+
+        if (batch.length === 0) {
+            alert('No transactions found in the data.');
+            return;
+        }
+
+        // Validate data structure
+        const isValid = batch.every(item =>
+            item && typeof item === 'object' &&
+            (item.amt !== undefined || item.amount !== undefined)
+        );
+
+        if (!isValid) {
+            alert('Invalid transaction data format. Each transaction must have an amount.');
+            return;
+        }
+
+        // Use existing batch import UI
+        handleBatchImport(batch);
+
+    } catch (error) {
+        console.error('Clipboard import error:', error);
+        alert('Failed to import: ' + error.message);
+    }
+}
+
 async function processBatchImport(batch) {
+
     for (const item of batch) {
         // Find card by name (partial match)
         const card = cards.find(c => c.name.toLowerCase().includes((item.card || '').toLowerCase())) || cards[0];
@@ -734,16 +938,25 @@ async function processBatchImport(batch) {
     updateStats();
 }
 
-function showOnboarding() {
-    const overlay = document.createElement('div');
-    overlay.className = 'onboarding-overlay';
-    overlay.id = 'onboardingOverlay';
+async function showOnboarding() {
+    let overlay = document.getElementById('onboardingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'onboarding-overlay';
+        overlay.id = 'onboardingOverlay';
+        document.body.appendChild(overlay);
+    }
 
+    const isMobile = isMobileDevice();
     let currentStep = 1;
     let hasExported = false;
     let hasLinked = false;
     const selectedPresets = new Set();
     const allPresets = [...cardPresets, ...userPresets];
+
+    // Load previously selected cards if any
+    const savedSelections = await storage.get('onboardingSelections') || [];
+    savedSelections.forEach(id => selectedPresets.add(id));
 
     const presetsHtml = allPresets.map(preset => `
         <div class="preset-item" data-id="${preset.id}">
@@ -754,6 +967,7 @@ function showOnboarding() {
     `).join('');
 
     overlay.innerHTML = `
+        <div class="onboarding-scroll-area">
         <div class="onboarding-content">
             <div class="onboarding-header">
                 <h1>Welcome to OptimalSwipe</h1>
@@ -762,6 +976,7 @@ function showOnboarding() {
                         <div class="dot">1</div>
                         <span>Setup Wallet</span>
                     </div>
+                    ${!isMobile ? `
                     <div class="step-indicator" data-step="2">
                         <div class="dot">2</div>
                         <span>Establish Vault</span>
@@ -770,8 +985,9 @@ function showOnboarding() {
                         <div class="dot">3</div>
                         <span>Sync</span>
                     </div>
+                    ` : ''}
                     <div class="step-indicator" data-step="4">
-                        <div class="dot">4</div>
+                        <div class="dot">${isMobile ? '2' : '4'}</div>
                         <span>Secure</span>
                     </div>
                 </div>
@@ -780,8 +996,10 @@ function showOnboarding() {
             <!-- Step 1: Card Selection -->
             <div class="step-view active" data-step="1">
                 <p class="tagline" style="text-align: center; margin-bottom: 30px;">SELECT YOUR CARDS TO GET STARTED</p>
-                <div class="preset-grid">
-                    ${presetsHtml}
+                <div id="onboardingPresetGrid" class="preset-grid">
+                    <div class="loading-shimmer" style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+                        Loading recommended cards...
+                    </div>
                 </div>
             </div>
 
@@ -814,8 +1032,8 @@ function showOnboarding() {
                 <div class="onboarding-action-card">
                     <span class="icon-large">🔄</span>
                     <h2>Enable Universal Live Sync</h2>
-                    <p style="color: var(--text-secondary); margin-bottom: 24px;">
-                        Establish a live link to your backup file. Once linked, every change you make will be automatically saved directly to your local file!
+                    <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
+                        Establish a live link to your backup file. Once linked, every change you make will be automatically saved directly to your linked file!
                     </p>
                     ${storage.supportsFileSystemApi() ? `
                     <button id="onboardingLinkBtn" class="btn" style="width: 100%;">
@@ -823,10 +1041,10 @@ function showOnboarding() {
                     </button>
                     ` : `
                     <div class="info-box" style="margin-bottom: 24px;">
-                        <span class="icon">📱</span>
-                        <p style="font-size: 0.9rem;">Automatic file linking is not supported on mobile browsers. Use the <strong>Manual iOS Shortcut</strong> for syncing on iPhone.</p>
+                        <span class="icon">ℹ️</span>
+                        <p style="font-size: 0.9rem;">Automatic file linking is not supported by your current browser (common on Safari and Mobile). You can still use manual backups.</p>
                     </div>
-                    <button class="btn-secondary" style="width: 100%;" onclick="this.closest('.onboarding-content').querySelector('#nextStep').click()">Skip for Mobile</button>
+                    <button class="btn-secondary" style="width: 100%;" onclick="document.getElementById('nextStep').click()">Continue Without Sync</button>
                     `}
                     <ul class="instruction-list">
                         <li>Select the file you just downloaded</li>
@@ -841,7 +1059,7 @@ function showOnboarding() {
                 <div class="onboarding-action-card">
                     <span class="icon-large">🔐</span>
                     <h2>Secure Your Wallet</h2>
-                    <p style="color: var(--text-secondary); margin-bottom: 24px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
                         Enable Biometric Unlock (FaceID/TouchID) to keep your wallet private. Your biometric data never leaves your device's secure enclave.
                     </p>
                     <div id="biometricSetupArea" style="width: 100%;">
@@ -856,16 +1074,19 @@ function showOnboarding() {
                     </ul>
                 </div>
             </div>
+        </div>
+        </div> <!-- End of scroll area -->
 
-            <div class="onboarding-footer">
-                <button id="prevStep" class="btn-secondary" style="visibility: hidden;">Back</button>
-                <div style="flex: 1;"></div>
-                <button id="nextStep" class="btn" style="min-width: 200px;">Continue</button>
-            </div>
+        <div class="onboarding-footer">
+            <button id="prevStep" class="btn-secondary">Back</button>
+            <div class="footer-spacer" style="flex: 1;"></div>
+            <button id="nextStep" class="btn">Continue</button>
         </div>
     `;
 
-    document.body.appendChild(overlay);
+    if (!document.body.contains(overlay)) {
+        document.body.appendChild(overlay);
+    }
 
     const updateWizardUI = () => {
         // Update views
@@ -884,10 +1105,10 @@ function showOnboarding() {
         const prevBtn = document.getElementById('prevStep');
         const nextBtn = document.getElementById('nextStep');
 
-        prevBtn.style.visibility = currentStep === 1 ? 'hidden' : 'visible';
+        prevBtn.style.display = currentStep === 1 ? 'none' : 'block';
 
         if (currentStep === 1) {
-            nextBtn.innerText = 'Go to Vault Setup';
+            nextBtn.innerText = isMobile ? 'Continue to Security' : 'Go to Vault Setup';
             nextBtn.disabled = false;
         } else if (currentStep === 2) {
             nextBtn.innerText = 'Go to Sync Setup';
@@ -901,8 +1122,25 @@ function showOnboarding() {
         }
     };
 
+    // Render presets asynchronously to keep the main thread fluid
+    const renderOnboardingPresets = () => {
+        const grid = document.getElementById('onboardingPresetGrid');
+        if (!grid) return;
+
+        requestAnimationFrame(() => {
+            const presetsHtml = allPresets.map(preset => `
+                <div class="preset-item ${selectedPresets.has(preset.id) ? 'selected' : ''}" data-id="${preset.id}">
+                    <div class="preset-card-mini" style="background: ${preset.color}; border: 1px solid ${preset.color === '#f5f5f7' ? '#d1d1d6' : 'transparent'};"></div>
+                    <div class="preset-name">${preset.name}</div>
+                    <div class="preset-issuer">${preset.issuer}</div>
+                </div>
+            `).join('');
+            grid.innerHTML = presetsHtml;
+        });
+    };
+
     // Card selection event
-    overlay.querySelector('.preset-grid').addEventListener('click', (e) => {
+    overlay.querySelector('.preset-grid').addEventListener('click', async (e) => {
         const item = e.target.closest('.preset-item');
         if (!item) return;
 
@@ -914,6 +1152,9 @@ function showOnboarding() {
             selectedPresets.add(id);
             item.classList.add('selected');
         }
+
+        // Persist selections to IndexedDB
+        await storage.set('onboardingSelections', Array.from(selectedPresets));
     });
 
     document.getElementById('onboardingExportBtn').onclick = async () => {
@@ -944,11 +1185,15 @@ function showOnboarding() {
         linkBtn.onclick = async () => {
             const handle = await storage.linkBackupFile();
             if (handle) {
+                // Pull data immediately so onboarding reflects the backup
+                await storage.pullFromLinkedFile();
+                await loadData();
+
                 hasLinked = true;
-                linkBtn.innerText = '✓ Vault Linked';
+                linkBtn.innerText = '✓ Vault Linked & Restored';
                 linkBtn.classList.add('btn-secondary');
                 updateWizardUI();
-                alert('Vault linked successfully! Live sync is now active.');
+                alert('Vault linked and data restored successfully!');
             }
         };
     }
@@ -998,7 +1243,11 @@ function showOnboarding() {
 
     document.getElementById('prevStep').onclick = () => {
         if (currentStep > 1) {
-            currentStep--;
+            if (isMobile && currentStep === 4) {
+                currentStep = 1;
+            } else {
+                currentStep--;
+            }
             updateWizardUI();
         }
     };
@@ -1008,7 +1257,8 @@ function showOnboarding() {
             if (selectedPresets.size === 0) {
                 if (!confirm("You haven't selected any cards. Are you sure you want to add manually later?")) return;
             }
-            currentStep++;
+            // Skip vault/sync steps on mobile
+            currentStep = isMobile ? 4 : 2;
             updateWizardUI();
         } else if (currentStep === 2) {
             currentStep++;
@@ -1019,12 +1269,14 @@ function showOnboarding() {
         } else if (currentStep === 4) {
             onboardingCompleted = true;
             await storage.set('onboardingCompleted', true);
+            await storage.set('onboardingSelections', []); // Clear saved selections
             overlay.remove();
             startApp();
         }
     };
 
     updateWizardUI();
+    renderOnboardingPresets();
 }
 
 
@@ -1201,4 +1453,120 @@ async function unlockApp() {
     }
 }
 
-init();
+// Mobile Backup Share Function
+async function handleMobileShareBackup() {
+    try {
+        const allKeys = ['cards', 'payments', 'userPresets', 'biometricEnabled', 'onboardingCompleted'];
+        const data = {
+            version: '2.0.0',
+            exportDate: new Date().toISOString()
+        };
+
+        for (const key of allKeys) {
+            data[key] = await storage.get(key) || [];
+        }
+
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const fileName = `optimalswipe_backup_${new Date().toISOString().split('T')[0]}.json`;
+
+        // Check if Web Share API is available
+        if (navigator.share && navigator.canShare) {
+            const file = new File([blob], fileName, { type: 'application/json' });
+
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: 'OptimalSwipe Backup',
+                    text: 'Save this backup to iCloud Drive or Files app'
+                });
+
+                await storage.updateBackupInfo(data.payments.length);
+                updateBackupStatusUI();
+                return;
+            }
+        }
+
+        // Fallback: Traditional download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        await storage.updateBackupInfo(data.payments.length);
+        updateBackupStatusUI();
+
+    } catch (error) {
+        console.error('Mobile backup share error:', error);
+        alert('Failed to share backup. Try using "One-Time Export" instead.');
+    }
+}
+
+// Shortcut Guide Modal
+function showShortcutGuide() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '10000';
+
+    overlay.innerHTML = `
+        <div class="modal-content" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+            <h3 style="margin-bottom: 16px;">🍎 iOS Shortcut Setup</h3>
+            
+            <div style="background: rgba(244, 196, 48, 0.1); padding: 16px; border-radius: 8px; border-left: 4px solid var(--accent-gold); margin-bottom: 20px;">
+                <strong>What this does:</strong> Auto-imports transactions from Apple Wallet
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <h4 style="color: var(--accent-gold); margin-bottom: 12px; font-size: 1rem;">Step 1: Create Automation</h4>
+                <ol style="padding-left: 20px; color: var(--text-secondary); line-height: 1.8; font-size: 0.9rem;">
+                    <li>Open <strong>Shortcuts</strong> → <strong>Automation</strong></li>
+                    <li>Tap <strong>+</strong> → Search <strong>"Wallet"</strong></li>
+                    <li>Select <strong>"When I tap"</strong></li>
+                    <li>Choose <strong>Any Card</strong>, <strong>When: Sent</strong></li>
+                    <li>Set <strong>"Run Immediately"</strong></li>
+                    <li>Turn <strong>OFF</strong> "Notify When Run"</li>
+                </ol>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <h4 style="color: var(--accent-gold); margin-bottom: 12px; font-size: 1rem;">Step 2: Add Actions</h4>
+                <ol style="padding-left: 20px; color: var(--text-secondary); line-height: 1.8; font-size: 0.9rem;">
+                    <li>Add <strong>Text</strong> action with:
+                        <pre style="background: var(--bg-primary); padding: 8px; border-radius: 4px; overflow-x: auto; font-size: 0.75rem; margin: 8px 0;">{"amt": [Amount], "merch": "[Merchant]"}</pre>
+                        <small style="color: var(--text-muted);">Replace with Shortcut Input variables</small>
+                    </li>
+                    <li>Add <strong>URL Encode</strong> → Use Text above</li>
+                    <li>Add <strong>URL</strong>: <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 3px; font-size: 0.75rem;">${window.location.origin}/?import=</code></li>
+                    <li>After <code>=</code>, insert <strong>Encoded Text</strong></li>
+                    <li>Add <strong>Open URLs</strong></li>
+                </ol>
+            </div>
+
+            <div style="background: rgba(80, 200, 120, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid var(--accent-emerald); margin-bottom: 16px; font-size: 0.85rem;">
+                <strong>💡 Test:</strong> Tap Play in Shortcuts. If this app opens with a transaction popup, it works!
+            </div>
+
+            <div class="modal-actions">
+                <button id="closeGuideBtn" class="btn" style="width: 100%;">Got It!</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    document.getElementById('closeGuideBtn').onclick = () => overlay.remove();
+    overlay.onclick = (e) => {
+        if (e.target === overlay) overlay.remove();
+    };
+}
+
+// Initial App Entry - Fired as soon as HTML structure is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => init());
+} else {
+    init();
+}

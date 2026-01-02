@@ -2,9 +2,9 @@ import { get, set, del, update, keys } from 'idb-keyval';
 
 // Enhanced Storage Helper with IndexedDB and Filesystem-like Export/Import
 export const storage = {
-    // Check if File System Access API is supported (Desktop-only usually)
+    // Check if File System Access API is supported (Supported in Chrome/Edge/Opera desktop)
     supportsFileSystemApi() {
-        return !!window.showOpenFilePicker;
+        return typeof window.showOpenFilePicker === 'function';
     },
 
     async get(key) {
@@ -117,6 +117,7 @@ export const storage = {
                     }
 
                     // Mark as backed up on import
+                    await set('last_pull_time', Date.now());
                     await this.updateBackupInfo(data.payments ? data.payments.length : 0);
                     resolve(true);
                 } catch (error) {
@@ -128,21 +129,53 @@ export const storage = {
         });
     },
 
-    // File System Access API: Link a specific file for syncing
+
+
+    // File System Access API: Link an EXISTING file for syncing
     async linkBackupFile() {
-        try {
-            const [handle] = await window.showOpenFilePicker({
-                types: [{
-                    description: 'JSON Backup File',
-                    accept: { 'application/json': ['.json'] },
-                }],
-                multiple: false
+        if (this.supportsFileSystemApi()) {
+            try {
+                const [handle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'JSON Backup File',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                    multiple: false
+                });
+                await set('backup_file_handle', handle);
+                return handle;
+            } catch (error) {
+                console.error('File linking failed:', error);
+                return null;
+            }
+        } else {
+            // FALLBACK for Safari/Firefox: Use standard file input to "select" a file
+            return new Promise((resolve) => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        try {
+                            // Automatically import the data from the chosen file
+                            await this.importData(file);
+
+                            // Save the name for the manual sync UI
+                            await set('backup_file_name_fallback', file.name);
+
+                            // Resolve with a mock handle for UI consistency
+                            resolve({ name: file.name, isFallback: true });
+                        } catch (err) {
+                            console.error('Initial link import failed:', err);
+                            resolve(null);
+                        }
+                    } else {
+                        resolve(null);
+                    }
+                };
+                input.click();
             });
-            await set('backup_file_handle', handle);
-            return handle;
-        } catch (error) {
-            console.error('File linking failed:', error);
-            return null;
         }
     },
 
@@ -150,6 +183,7 @@ export const storage = {
     async unlinkBackupFile() {
         try {
             await del('backup_file_handle');
+            await del('backup_file_name_fallback');
             await del('last_backup_info');
             return true;
         } catch (error) {
@@ -162,43 +196,108 @@ export const storage = {
     async syncToLinkedFile() {
         try {
             const handle = await get('backup_file_handle');
-            if (!handle) return { success: false, error: 'No file linked' };
 
-            // Check if we have permission
-            if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-                if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
-                    return { success: false, error: 'Permission denied' };
-                }
-            }
-
+            // Collect data to sync
             const allKeys = ['cards', 'payments', 'userPresets', 'onboardingCompleted', 'biometricEnabled'];
             const data = {
                 version: '2.0.0',
                 exportDate: new Date().toISOString()
             };
-
             for (const key of allKeys) {
                 data[key] = await this.get(key) || [];
             }
 
-            const writable = await handle.createWritable();
-            await writable.write(JSON.stringify(data, null, 2));
-            await writable.close();
+            if (handle) {
+                // NATIVE SYNC: Silent background write
+                if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+                    if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+                        return { success: false, error: 'Permission denied' };
+                    }
+                }
+                const writable = await handle.createWritable();
+                await writable.write(JSON.stringify(data, null, 2));
+                await writable.close();
 
-            await this.updateBackupInfo(data.payments.length);
-            return { success: true };
+                // Get updated file metadata after write to track sync time
+                const updatedFile = await handle.getFile();
+                await this.updateBackupInfo(data.payments.length, updatedFile.lastModified);
+                return { success: true };
+            } else {
+                // FALLBACK SYNC: Trigger a download (Manual sync)
+                const fallbackName = await get('backup_file_name_fallback');
+                if (!fallbackName) return { success: false, error: 'No file linked' };
+
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fallbackName; // Suggest the original filename
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                await this.updateBackupInfo(data.payments.length);
+                return { success: true, isManual: true };
+            }
         } catch (error) {
             console.error('Sync failed:', error);
             return { success: false, error: error.message };
         }
     },
 
-    async updateBackupInfo(paymentCount) {
+    async updateBackupInfo(paymentCount, lastModified = Date.now()) {
         const info = {
             lastBackupTime: Date.now(),
-            transactionCountAtBackup: paymentCount
+            transactionCountAtBackup: paymentCount,
+            fileLastModified: lastModified
         };
         await set('last_backup_info', info);
+    },
+
+    // Check if the linked file has been modified externally
+    async checkForExternalChanges() {
+        try {
+            const handle = await get('backup_file_handle');
+            if (!handle) return false;
+
+            // We can only check if we have permission
+            if ((await handle.queryPermission({ mode: 'read' })) !== 'granted') return false;
+
+            const file = await handle.getFile();
+            const info = await get('last_backup_info') || { fileLastModified: 0 };
+
+            // If file on disk is newer than our last record, it's an external change
+            return file.lastModified > (info.fileLastModified || 0) + 1000; // 1s buffer
+        } catch (e) {
+            console.warn('Could not check for external changes:', e);
+            return false;
+        }
+    },
+
+    // Pull data FROM the linked file into the app
+    async pullFromLinkedFile() {
+        try {
+            const handle = await get('backup_file_handle');
+            if (!handle) return { success: false, error: 'No handle' };
+
+            const file = await handle.getFile();
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            // Import the data
+            if (data.cards) await this.set('cards', data.cards);
+            if (data.payments) await this.set('payments', data.payments);
+            if (data.userPresets) await this.set('userPresets', data.userPresets);
+
+            // Update our sync record with this file's stats
+            await set('last_pull_time', Date.now());
+            await this.updateBackupInfo(data.payments ? data.payments.length : 0, file.lastModified);
+
+            return { success: true, data };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     },
 
     async updateWalletSyncTime() {
@@ -208,15 +307,19 @@ export const storage = {
     async getBackupStatus() {
         const info = await get('last_backup_info') || { lastBackupTime: 0, transactionCountAtBackup: 0 };
         const walletSyncTime = await get('last_wallet_sync_time') || 0;
+        const pullTime = await get('last_pull_time') || 0;
         const payments = await this.get('payments') || [];
         const handle = await get('backup_file_handle');
+        const fallbackName = await get('backup_file_name_fallback');
 
         return {
             lastBackupTime: info.lastBackupTime,
             lastWalletSyncTime: walletSyncTime,
+            lastPullTime: pullTime,
             pendingTransactions: payments.length - info.transactionCountAtBackup,
-            isLinked: !!handle,
-            fileName: handle ? handle.name : null
+            isLinked: !!handle || !!fallbackName,
+            isNative: !!handle,
+            fileName: handle ? handle.name : (fallbackName || null)
         };
     },
 

@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'inline',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       devOptions: {
         enabled: true
@@ -16,8 +17,8 @@ export default defineConfig({
         description: 'Never guess which card to use again. Get instant recommendations to maximize rewards on every purchase.',
         theme_color: '#f4c430',
         background_color: '#0a0e1a',
-        scope: '/OptimalSwipe/',
-        start_url: '/OptimalSwipe/',
+        scope: './',
+        start_url: './',
         display: 'standalone',
         icons: [
           {
