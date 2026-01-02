@@ -22,10 +22,22 @@ function isMobileDevice() {
 // Initialize app
 async function init() {
     await loadData();
+    // Debug: log onboarding sources so we can diagnose resume issues
+    try {
+        storage.get('onboardingCompleted').then(v => console.debug('[debug] storage.onboardingCompleted =>', v));
+    } catch (e) { console.debug('[debug] storage.get failed', e); }
+    try { console.debug('[debug] localStorage.onboardingCompleted =>', localStorage.getItem('onboardingCompleted')); } catch (e) { console.debug('[debug] localStorage read failed', e); }
 
-    if (!onboardingCompleted) {
-        showOnboarding();
-    } else {
+    // If onboarding was previously completed (stored in IndexedDB), make sure
+    // any pre-rendered skeleton overlay is removed and the helper class cleared.
+    if (onboardingCompleted) {
+        document.documentElement.classList.remove('show-onboarding');
+        document.documentElement.classList.add('onboarded');
+        const preOverlay = document.getElementById('onboardingOverlay');
+        if (preOverlay) {
+            try { preOverlay.remove(); } catch (e) { preOverlay.style.display = 'none'; }
+        }
+
         const biometricEnabled = await storage.get('biometricEnabled');
         if (biometricEnabled) {
             showLockoutScreen();
@@ -34,7 +46,11 @@ async function init() {
             // Initial check for file updates
             await checkSyncStatus();
         }
+        return;
     }
+
+    // Otherwise, show the onboarding experience
+    showOnboarding();
 }
 
 async function startApp() {
@@ -108,6 +124,7 @@ async function startApp() {
         if (e.target.id === 'resetAppBtn') {
             if (confirm('CRITICAL: This will PERMANENTLY DELETE all local cards, payments, and settings. Your linked backup file will NOT be touched. Are you sure you want to proceed?')) {
                 await storage.clearAllData();
+                try { localStorage.removeItem('onboardingCompleted'); } catch (e) {}
                 window.location.reload();
             }
         }
@@ -1269,7 +1286,11 @@ async function showOnboarding() {
         } else if (currentStep === 4) {
             onboardingCompleted = true;
             await storage.set('onboardingCompleted', true);
+            try { localStorage.setItem('onboardingCompleted', 'true'); } catch (e) {}
             await storage.set('onboardingSelections', []); // Clear saved selections
+            // Ensure any pre-rendered overlay or helper classes are cleaned up
+            document.documentElement.classList.remove('show-onboarding');
+            document.documentElement.classList.add('onboarded');
             overlay.remove();
             startApp();
         }
@@ -1563,6 +1584,28 @@ function showShortcutGuide() {
         if (e.target === overlay) overlay.remove();
     };
 }
+
+// Ensure overlay is not left visible when app resumes from background.
+window.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+        try {
+            const completedFromStorage = await storage.get('onboardingCompleted');
+            const completedFromLocal = (function(){ try { return localStorage.getItem('onboardingCompleted') === 'true'; } catch(e){ return false; } })();
+            console.debug('[debug] visibilitychange - storage:', completedFromStorage, 'local:', completedFromLocal, 'onboardingCompletedVar:', onboardingCompleted);
+            if (completedFromStorage || completedFromLocal) {
+                document.documentElement.classList.remove('show-onboarding');
+                document.documentElement.classList.add('onboarded');
+                const preOverlay = document.getElementById('onboardingOverlay');
+                if (preOverlay) {
+                    try { preOverlay.remove(); } catch (e) { preOverlay.style.display = 'none'; }
+                }
+            }
+        } catch (e) {
+            // Non-fatal: storage may not be ready yet
+            try { console.debug('[debug] visibilitychange fallback localStorage =>', localStorage.getItem('onboardingCompleted')); } catch (err) {}
+        }
+    }
+});
 
 // Initial App Entry - Fired as soon as HTML structure is ready
 if (document.readyState === 'loading') {
