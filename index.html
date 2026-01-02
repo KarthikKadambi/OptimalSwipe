@@ -14,7 +14,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <title>OptimalSwipe - Smart Credit Card Manager</title>
     <link rel="icon" type="image/png" href="/favicon.png">
-    <link rel="modulepreload" href="./src/main.js">
+    <link rel="modulepreload" href="/src/main.js">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#f4c430">
@@ -31,16 +31,22 @@
             bottom: 0;
             background: #0a0e1a;
             z-index: 20000;
-            display: flex;
+            display: none; /* hidden by default; only show when explicitly requested */
             flex-direction: column;
             overflow: hidden;
             opacity: 1;
             transition: opacity 0.3s;
         }
 
+        /* Legacy class: hide overlay when onboarding completed */
         .onboarded .onboarding-overlay {
             display: none !important;
             pointer-events: none;
+        }
+
+        /* New: explicitly show onboarding only when the html element has this class */
+        .show-onboarding .onboarding-overlay {
+            display: flex !important;
         }
 
         .onboarding-header {
@@ -103,8 +109,13 @@
         }
     </style>
     <script>
+        // Show the onboarding overlay only when the user hasn't completed onboarding.
+        // This prevents the skeleton from covering the app if the module script doesn't load
+        // or when the PWA starts in a context where the preload path could fail.
         if (localStorage.getItem('onboardingCompleted') === 'true') {
             document.documentElement.classList.add('onboarded');
+        } else {
+            document.documentElement.classList.add('show-onboarding');
         }
     </script>
 </head>
