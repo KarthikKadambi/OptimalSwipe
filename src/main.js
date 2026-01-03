@@ -1021,9 +1021,24 @@ async function showOnboarding() {
 
     // Auto-advance if we just opened the standalone app for the first time
     if (isStandalone() && currentStep === 1) {
+        console.log('[PWA] Standalone detected on load. Advancing.');
         currentStep = 2;
         await storage.set('onboardingCurrentStep', 2);
     }
+
+    // Auto-check standalone status while on Step 1 to handle timing issues
+    const standalonePoll = setInterval(() => {
+        if (currentStep === 1 && isStandalone()) {
+            console.log('[PWA] Standalone detected via polling. Advancing.');
+            currentStep = 2;
+            storage.set('onboardingCurrentStep', 2);
+            if (typeof updateWizardUI === 'function') updateWizardUI();
+            clearInterval(standalonePoll);
+        }
+        if (onboardingCompleted || currentStep > 1) {
+            clearInterval(standalonePoll);
+        }
+    }, 1000);
 
     // Force back to step 1 if we're in a browser and haven't bridged yet
     if (!isStandalone() && currentStep > 1) {
@@ -1110,8 +1125,9 @@ async function showOnboarding() {
                         `}
                     </div>
 
-                    <div id="onboardingInstalledMessage" style="display: none; text-align: center; background: rgba(0, 255, 127, 0.1); padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+                    <div id="onboardingInstalledMessage" style="display: none; text-align: center; background: rgba(0, 255, 127, 0.1); padding: 16px; border-radius: 12px; margin-bottom: 24px; cursor: pointer;" onclick="currentStep = 2; updateWizardUI();">
                         <p style="color: #00ff7f; font-weight: 600; margin: 0;">✓ App Already Installed & Ready</p>
+                        <p style="color: #00ff7f; font-size: 0.75rem; margin-top: 4px; opacity: 0.8;">Click here if not auto-advancing</p>
                     </div>
 
                     <ul class="instruction-list">
@@ -1470,7 +1486,7 @@ async function showOnboarding() {
         }
     };
 
-    console.log('App Initializing - v1.1.4');
+    console.log('App Initializing - v1.1.5');
     updateWizardUI();
     renderOnboardingPresets();
 }
