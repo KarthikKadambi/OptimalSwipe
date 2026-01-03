@@ -24,24 +24,17 @@ function isSafari() {
 
 // Utility: Check if running in standalone mode (installed PWA)
 function isStandalone() {
-    // Strictly detect if the app is running in its own window
+    // Strictly detect if the app is running in its own dedicated window
     const matchesStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-        window.matchMedia('(display-mode: fullscreen)').matches ||
         window.navigator.standalone === true;
 
-    // Some browsers on Android use 'minimal-ui' for installed apps
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const matchesMinimalUI = isAndroid && window.matchMedia('(display-mode: minimal-ui)').matches;
-
-    const isStandaloneMode = matchesStandalone || matchesMinimalUI || document.referrer.includes('android-app://');
-
     console.debug('[PWA] Standalone check:', {
-        isStandaloneMode,
-        displayMode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'other',
-        navigatorStandalone: window.navigator.standalone
+        isStandaloneMode: !!matchesStandalone,
+        isMediaStandalone: window.matchMedia('(display-mode: standalone)').matches,
+        isSafariStandalone: window.navigator.standalone === true
     });
 
-    return !!isStandaloneMode;
+    return !!matchesStandalone;
 }
 
 // Utility: Detect mobile device - Optimized to avoid forced reflows
@@ -1234,11 +1227,17 @@ async function showOnboarding() {
     const updateWizardUI = () => {
         const standalone = isStandalone();
 
-        // Safety: If somehow we are in a browser but on a later step, force back to Step 1
+        // AGGRESSIVE ENFORCEMENT: If in browser, you CANNOT stay past Step 1.
         if (!standalone && currentStep > 1) {
-            console.warn('[PWA] Not in standalone mode. Reverting to Step 1.');
+            console.warn('[PWA] Browser tab detected. Forcing back to Step 1 for installation.');
             currentStep = 1;
             storage.set('onboardingCurrentStep', 1);
+        }
+
+        // AGGRESSIVE ENFORCEMENT: If in standalone, you SHOULD NOT stay on Step 1.
+        if (standalone && currentStep === 1) {
+            currentStep = 2;
+            storage.set('onboardingCurrentStep', 2);
         }
 
         // Update views
@@ -1471,7 +1470,7 @@ async function showOnboarding() {
         }
     };
 
-    console.log('App Initializing - v1.1.2');
+    console.log('App Initializing - v1.1.4');
     updateWizardUI();
     renderOnboardingPresets();
 }
