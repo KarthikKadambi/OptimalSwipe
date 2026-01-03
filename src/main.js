@@ -24,7 +24,13 @@ function isSafari() {
 
 // Utility: Check if running in standalone mode (installed PWA)
 function isStandalone() {
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.navigator.standalone ||
+        document.referrer.includes('android-app://');
+    console.debug('[PWA] Standalone check:', isStandaloneMode);
+    return !!isStandaloneMode;
 }
 
 // Utility: Detect mobile device - Optimized to avoid forced reflows
@@ -1010,7 +1016,7 @@ async function showOnboarding() {
     let currentStep = await storage.get('onboardingCurrentStep') || 1;
 
     // Auto-advance if we just opened the standalone app for the first time
-    if (isStandaloneMode && currentStep === 1) {
+    if (isStandalone() && currentStep === 1) {
         currentStep = 2;
         await storage.set('onboardingCurrentStep', 2);
     }
@@ -1228,7 +1234,8 @@ async function showOnboarding() {
         prevBtn.style.display = currentStep === 1 ? 'none' : 'block';
 
         if (currentStep === 1) {
-            if (isStandaloneMode) {
+            const standalone = isStandalone();
+            if (standalone) {
                 nextBtn.innerText = 'Continue to Setup';
                 nextBtn.disabled = false;
             } else {
