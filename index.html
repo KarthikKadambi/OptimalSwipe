@@ -19,6 +19,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#f4c430">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
 
     <link rel="stylesheet" href="/src/style.css">
     <style>
@@ -31,7 +32,8 @@
             bottom: 0;
             background: #0a0e1a;
             z-index: 20000;
-            display: none; /* hidden by default; only show when explicitly requested */
+            display: none;
+            /* hidden by default; only show when explicitly requested */
             flex-direction: column;
             overflow: hidden;
             opacity: 1;
@@ -204,6 +206,12 @@
 
                 <button class="tab-btn" data-tab="vault">
                     <span class="icon">⚙️</span> Settings
+                </button>
+
+                <!-- Custom PWA Install Button -->
+                <button id="installBtn" class="tab-btn"
+                    style="display:none; margin-top: auto; color: var(--accent-gold); font-weight: 600;">
+                    <span class="icon">📲</span> Install App
                 </button>
             </nav>
 

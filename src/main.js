@@ -11,6 +11,22 @@ let presetRewardTierCount = 0;
 let lastNotifiedTransactionCount = 0;
 let onboardingCompleted = false;
 
+// Utility: Detect iOS - Used for PWA install instructions
+function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+// Utility: Detect Safari Browser (includes macOS and iOS)
+function isSafari() {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+}
+
+// Utility: Check if running in standalone mode (installed PWA)
+function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+}
+
 // Utility: Detect mobile device - Optimized to avoid forced reflows
 const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
 function isMobileDevice() {
@@ -50,6 +66,8 @@ async function init() {
     }
 
     // Otherwise, show the onboarding experience
+    // Also handle deep links early so import modals appear even if onboarding skeleton is present
+    try { checkDeepLinkImport(); } catch (e) { console.error('deep link check failed', e); }
     showOnboarding();
 }
 
@@ -124,7 +142,7 @@ async function startApp() {
         if (e.target.id === 'resetAppBtn') {
             if (confirm('CRITICAL: This will PERMANENTLY DELETE all local cards, payments, and settings. Your linked backup file will NOT be touched. Are you sure you want to proceed?')) {
                 await storage.clearAllData();
-                try { localStorage.removeItem('onboardingCompleted'); } catch (e) {}
+                try { localStorage.removeItem('onboardingCompleted'); } catch (e) { }
                 window.location.reload();
             }
         }
@@ -791,6 +809,19 @@ async function handleRecommendationSubmit(e) {
             </div>
         </div>
     `;
+
+    // Run iOS Shortcut if on mobile
+    if (isMobileDevice()) {
+        const amount = purchaseDetails.amount || 0;
+        const category = purchaseDetails.category || '';
+        // Construct input exactly as user requested: amount=X%26category=Y
+        const shortcutUrl = `shortcuts://run-shortcut?name=RecommendCard&input=amount=${amount}%26category=${encodeURIComponent(category)}`;
+
+        // Use a slight delay to ensure UI renders before app switch
+        setTimeout(() => {
+            window.location.href = shortcutUrl;
+        }, 300);
+    }
 }
 
 async function checkDeepLinkImport() {
@@ -818,6 +849,16 @@ async function checkDeepLinkImport() {
 function handleBatchImport(batch) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+    // Ensure modal appears above any onboarding skeleton (onboarding uses z-index:20000)
+    overlay.style.position = 'fixed';
+    overlay.style.left = '0';
+    overlay.style.top = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '30001';
 
     let itemsHtml = batch.map(item => `
         <div class="import-item">
@@ -965,7 +1006,15 @@ async function showOnboarding() {
     }
 
     const isMobile = isMobileDevice();
-    let currentStep = 1;
+    const isStandaloneMode = isStandalone();
+    let currentStep = await storage.get('onboardingCurrentStep') || 1;
+
+    // Auto-advance if we just opened the standalone app for the first time
+    if (isStandaloneMode && currentStep === 1) {
+        currentStep = 2;
+        await storage.set('onboardingCurrentStep', 2);
+    }
+
     let hasExported = false;
     let hasLinked = false;
     const selectedPresets = new Set();
@@ -991,27 +1040,80 @@ async function showOnboarding() {
                 <div class="onboarding-stepper">
                     <div class="step-indicator active" data-step="1">
                         <div class="dot">1</div>
+                        <span>Install</span>
+                    </div>
+                    <div class="step-indicator" data-step="2">
+                        <div class="dot">2</div>
                         <span>Setup Wallet</span>
                     </div>
                     ${!isMobile ? `
-                    <div class="step-indicator" data-step="2">
-                        <div class="dot">2</div>
-                        <span>Establish Vault</span>
-                    </div>
                     <div class="step-indicator" data-step="3">
                         <div class="dot">3</div>
+                        <span>Establish Vault</span>
+                    </div>
+                    <div class="step-indicator" data-step="4">
+                        <div class="dot">4</div>
                         <span>Sync</span>
                     </div>
                     ` : ''}
-                    <div class="step-indicator" data-step="4">
-                        <div class="dot">${isMobile ? '2' : '4'}</div>
+                    <div class="step-indicator" data-step="5">
+                        <div class="dot">${isMobile ? '3' : '5'}</div>
                         <span>Secure</span>
                     </div>
                 </div>
             </div>
             
-            <!-- Step 1: Card Selection -->
+            <!-- Step 1: PWA Installation -->
             <div class="step-view active" data-step="1">
+                <div class="onboarding-action-card">
+                    <span class="icon-large">📲</span>
+                    <h2>Install OptimalSwipe</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
+                        For the best experience, persistent storage, and full-screen mode, please install OptimalSwipe to your home screen or dock.
+                    </p>
+                    
+                    <div id="onboardingInstallArea" style="width: 100%; margin-bottom: 24px; display: none;">
+                        <button id="onboardingInstallBtn" class="btn" style="width: 100%;">
+                            📲 Install App
+                        </button>
+                    </div>
+
+                    <div id="onboardingBrowserAdvice" style="margin-bottom: 24px; padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); width: 100%; font-size: 0.85rem;">
+                        ${storage.supportsFileSystemApi() ? `
+                            <div style="display: flex; align-items: center; gap: 10px; color: var(--accent-emerald);">
+                                <span style="font-size: 1.2rem;">🚀</span>
+                                <p style="margin: 0;"><strong>Automatic Sync Active:</strong> Your browser supports seamless, background file saving for the best experience.</p>
+                            </div>
+                        ` : `
+                            <div style="display: flex; align-items: flex-start; gap: 10px; color: var(--text-secondary);">
+                                <span style="font-size: 1.2rem;">⚠️</span>
+                                <p style="margin: 0; line-height: 1.4;">
+                                    <strong>Manual Sync Only:</strong> Safari and mobile browsers do not support direct file access. You will need to manually save your data. ${!isMobile ? 'For <strong>Automatic Live Sync</strong>, we recommend Chrome or Edge on desktop.' : ''}
+                                </p>
+                            </div>
+                        `}
+                    </div>
+
+                    <div id="onboardingInstalledMessage" style="display: none; text-align: center; background: rgba(0, 255, 127, 0.1); padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+                        <p style="color: #00ff7f; font-weight: 600; margin: 0;">✓ App Already Installed & Ready</p>
+                    </div>
+
+                    <ul class="instruction-list">
+                        <li><strong>Persistent Storage</strong>: PWAs have more reliable local storage.</li>
+                        <li><strong>Offline Access</strong>: Access your wallet even without internet.</li>
+                        <li><strong>Full Screen</strong>: Enjoy a beautiful, immersive app experience.</li>
+                    </ul>
+
+                    <div style="padding: 12px 16px; background: rgba(244, 196, 48, 0.05); border-radius: 12px; border: 1px solid rgba(244, 196, 48, 0.1); width: 100%;">
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0; line-height: 1.5; text-align: left;">
+                            <span style="color: var(--accent-gold); font-weight: 700;">Note:</span> To prevent data fragmentation, please install from your <strong>primary browser only</strong>. Each browser install maintains its own private, local storage.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Card Selection -->
+            <div class="step-view" data-step="2">
                 <p class="tagline" style="text-align: center; margin-bottom: 30px;">SELECT YOUR CARDS TO GET STARTED</p>
                 <div id="onboardingPresetGrid" class="preset-grid">
                     <div class="loading-shimmer" style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
@@ -1020,8 +1122,8 @@ async function showOnboarding() {
                 </div>
             </div>
 
-            <!-- Step 2: Establish Vault -->
-            <div class="step-view" data-step="2">
+            <!-- Step 3: Establish Vault -->
+            <div class="step-view" data-step="3">
                 <div class="onboarding-action-card">
                     <span class="icon-large">💾</span>
                     <h2>Establish Your Data Vault</h2>
@@ -1044,8 +1146,8 @@ async function showOnboarding() {
                 </div>
             </div>
 
-            <!-- Step 3: Live Sync -->
-            <div class="step-view" data-step="3">
+            <!-- Step 4: Live Sync -->
+            <div class="step-view" data-step="4">
                 <div class="onboarding-action-card">
                     <span class="icon-large">🔄</span>
                     <h2>Enable Universal Live Sync</h2>
@@ -1071,8 +1173,8 @@ async function showOnboarding() {
                 </div>
             </div>
 
-            <!-- Step 4: Security Setup -->
-            <div class="step-view" data-step="4">
+            <!-- Step 5: Security Setup -->
+            <div class="step-view" data-step="5">
                 <div class="onboarding-action-card">
                     <span class="icon-large">🔐</span>
                     <h2>Secure Your Wallet</h2>
@@ -1084,6 +1186,7 @@ async function showOnboarding() {
                             Enable FaceID / TouchID
                         </button>
                     </div>
+
                     <ul class="instruction-list">
                         <li>Instant access with your face or fingerprint</li>
                         <li>Protects your data if your device is unlocked</li>
@@ -1125,15 +1228,23 @@ async function showOnboarding() {
         prevBtn.style.display = currentStep === 1 ? 'none' : 'block';
 
         if (currentStep === 1) {
+            if (isStandaloneMode) {
+                nextBtn.innerText = 'Continue to Setup';
+                nextBtn.disabled = false;
+            } else {
+                nextBtn.innerText = 'Waiting for App Launch...';
+                nextBtn.disabled = true;
+            }
+        } else if (currentStep === 2) {
             nextBtn.innerText = isMobile ? 'Continue to Security' : 'Go to Vault Setup';
             nextBtn.disabled = false;
-        } else if (currentStep === 2) {
+        } else if (currentStep === 3) {
             nextBtn.innerText = 'Go to Sync Setup';
             nextBtn.disabled = !hasExported;
-        } else if (currentStep === 3) {
+        } else if (currentStep === 4) {
             nextBtn.innerText = 'Go to Security';
             nextBtn.disabled = storage.supportsFileSystemApi() ? !hasLinked : false;
-        } else if (currentStep === 4) {
+        } else if (currentStep === 5) {
             nextBtn.innerText = 'Complete Setup';
             nextBtn.disabled = false;
         }
@@ -1258,35 +1369,63 @@ async function showOnboarding() {
         }
     };
 
-    document.getElementById('prevStep').onclick = () => {
+    // PWA Install click handler for onboarding
+    const onboardingInstallBtn = document.getElementById('onboardingInstallBtn');
+    if (onboardingInstallBtn) {
+        onboardingInstallBtn.onclick = async () => {
+            if (isSafari()) {
+                showSafariInstallGuide();
+                return;
+            }
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response to onboarding install prompt: ${outcome}`);
+            deferredPrompt = null;
+            updateInstallButtonsVisibility();
+        };
+    }
+
+    // Determine initial visibility for install button in onboarding
+    updateInstallButtonsVisibility();
+
+    document.getElementById('prevStep').onclick = async () => {
         if (currentStep > 1) {
-            if (isMobile && currentStep === 4) {
-                currentStep = 1;
+            if (isMobile && currentStep === 5) {
+                currentStep = 2; // Jump back from Security to Wallet Setup
             } else {
                 currentStep--;
             }
+            await storage.set('onboardingCurrentStep', currentStep);
             updateWizardUI();
         }
     };
 
     document.getElementById('nextStep').onclick = async () => {
         if (currentStep === 1) {
+            currentStep++;
+            await storage.set('onboardingCurrentStep', currentStep);
+            updateWizardUI();
+        } else if (currentStep === 2) {
             if (selectedPresets.size === 0) {
                 if (!confirm("You haven't selected any cards. Are you sure you want to add manually later?")) return;
             }
             // Skip vault/sync steps on mobile
-            currentStep = isMobile ? 4 : 2;
-            updateWizardUI();
-        } else if (currentStep === 2) {
-            currentStep++;
+            currentStep = isMobile ? 5 : 3;
             updateWizardUI();
         } else if (currentStep === 3) {
             currentStep++;
+            await storage.set('onboardingCurrentStep', currentStep);
             updateWizardUI();
         } else if (currentStep === 4) {
+            currentStep++;
+            await storage.set('onboardingCurrentStep', currentStep);
+            updateWizardUI();
+        } else if (currentStep === 5) {
             onboardingCompleted = true;
             await storage.set('onboardingCompleted', true);
-            try { localStorage.setItem('onboardingCompleted', 'true'); } catch (e) {}
+            await storage.delete('onboardingCurrentStep'); // Clear step persistence
+            try { localStorage.setItem('onboardingCompleted', 'true'); } catch (e) { }
             await storage.set('onboardingSelections', []); // Clear saved selections
             // Ensure any pre-rendered overlay or helper classes are cleaned up
             document.documentElement.classList.remove('show-onboarding');
@@ -1585,12 +1724,181 @@ function showShortcutGuide() {
     };
 }
 
+// Custom PWA Installation Logic
+let deferredPrompt;
+const installBtn = document.getElementById('installBtn');
+
+function updateInstallButtonsVisibility() {
+    const isSafariBrowser = isSafari();
+    const isInstalled = isStandalone();
+
+    // Show on Chrome/Android if prompt available
+    // OR show on Safari if not standalone (to show instructions)
+    const show = !!deferredPrompt || (isSafariBrowser && !isInstalled);
+
+    if (installBtn) {
+        installBtn.style.display = show ? 'block' : 'none';
+        if (isSafariBrowser && !isInstalled) {
+            installBtn.innerHTML = '<span class="icon">📲</span> Install Guide';
+        } else {
+            installBtn.innerHTML = '<span class="icon">📲</span> Install App';
+        }
+    }
+    const onboardingInstallArea = document.getElementById('onboardingInstallArea');
+    const onboardingInstalledMessage = document.getElementById('onboardingInstalledMessage');
+
+    if (onboardingInstallArea || onboardingInstalledMessage) {
+        if (show) {
+            if (onboardingInstallArea) onboardingInstallArea.style.display = 'block';
+            if (onboardingInstalledMessage) onboardingInstalledMessage.style.display = 'none';
+        } else if (isInstalled) {
+            if (onboardingInstallArea) onboardingInstallArea.style.display = 'none';
+            if (onboardingInstalledMessage) onboardingInstalledMessage.style.display = 'block';
+        } else {
+            // Not installable and not installed (e.g. desktop non-Safari)
+            if (onboardingInstallArea) onboardingInstallArea.style.display = 'none';
+            if (onboardingInstalledMessage) onboardingInstalledMessage.style.display = 'none';
+        }
+
+        const onboardingBtn = document.getElementById('onboardingInstallBtn');
+        if (onboardingBtn) {
+            if (isSafariBrowser && !isInstalled) {
+                onboardingBtn.innerHTML = `📲 How to Install on ${isIOS() ? 'iOS' : 'Safari'}`;
+            } else {
+                onboardingBtn.innerHTML = '📲 Install App';
+            }
+        }
+
+        // If we just detected a transition to standalone mode, refresh UI
+        if (isInstalled && typeof updateWizardUI === 'function') {
+            updateWizardUI();
+        }
+    }
+}
+
+function showSafariInstallGuide() {
+    const isIos = isIOS();
+    const overlay = document.createElement('div');
+    overlay.className = 'safari-install-overlay';
+    overlay.style = `
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1a2032;
+        padding: 32px 24px 64px 24px;
+        border-radius: 24px 24px 0 0;
+        z-index: 100000;
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+        animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        text-align: center;
+        border-top: 2px solid var(--accent-gold);
+    `;
+
+    const instruction1 = isIos
+        ? `Tap the <strong>Share</strong> button <span style="font-size: 1.2rem; vertical-align: middle;">⎋</span> in Safari's bottom toolbar.`
+        : `Tap the <strong>Share</strong> button <span style="font-size: 1.2rem; vertical-align: middle;">⎋</span> (top right) or go to <strong>File</strong> in the menu bar.`;
+
+    const instruction2 = isIos
+        ? `Scroll down and select <strong>"Add to Home Screen"</strong> <span style="font-size: 1.2rem; vertical-align: middle;">⊞</span>.`
+        : `Select <strong>"Add to Dock..."</strong> <span style="font-size: 1.2rem; vertical-align: middle;">⊞</span> to install it as an app.`;
+
+    overlay.innerHTML = `
+        <div style="margin-bottom: 24px;">
+            <div style="font-size: 2.5rem; margin-bottom: 16px;">📲</div>
+            <h2 style="font-family: 'Playfair Display', serif; color: var(--accent-gold); margin-bottom: 12px;">Install OptimalSwipe</h2>
+            <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                For the best experience, install OptimalSwipe to your ${isIos ? 'home screen' : 'dock'}. This enables full-screen mode and persistent storage.
+            </p>
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.03); border-radius: 16px; padding: 24px; margin-bottom: 24px; text-align: left;">
+            <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
+                <div style="background: var(--accent-gold); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 800;">1</div>
+                <p style="color: var(--text-primary); font-size: 0.9rem;">${instruction1}</p>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 16px;">
+                <div style="background: var(--accent-gold); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 800;">2</div>
+                <p style="color: var(--text-primary); font-size: 0.9rem;">${instruction2}</p>
+            </div>
+        </div>
+        
+        <button id="closeSafariGuide" class="btn" style="width: 100%;">Got It!</button>
+        <div style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 40px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px;"></div>
+    `;
+
+    const blurEffect = document.createElement('div');
+    blurEffect.style = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(4px);
+        z-index: 99999;
+        animation: fadeIn 0.3s ease;
+    `;
+
+    document.body.appendChild(blurEffect);
+    document.body.appendChild(overlay);
+
+    const close = () => {
+        overlay.style.transform = 'translateY(100%)';
+        overlay.style.transition = 'transform 0.3s ease-in';
+        blurEffect.style.opacity = '0';
+        blurEffect.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => {
+            overlay.remove();
+            blurEffect.remove();
+        }, 300);
+    };
+
+    document.getElementById('closeSafariGuide').onclick = close;
+    blurEffect.onclick = close;
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later.
+    deferredPrompt = e;
+    // Update UI notify the user they can install the PWA
+    updateInstallButtonsVisibility();
+});
+
+if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+        if (isSafari()) {
+            showSafariInstallGuide();
+            return;
+        }
+        if (!deferredPrompt) return;
+        // Show the install prompt
+        deferredPrompt.prompt();
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`User response to the install prompt: ${outcome}`);
+        // We've used the prompt, and can't use it again, throw it away
+        deferredPrompt = null;
+        // Hide the buttons
+        updateInstallButtonsVisibility();
+    });
+}
+
+window.addEventListener('appinstalled', () => {
+    console.log('PWA installed');
+    deferredPrompt = null;
+    // Hide the buttons
+    updateInstallButtonsVisibility();
+});
+
 // Ensure overlay is not left visible when app resumes from background.
 window.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
         try {
             const completedFromStorage = await storage.get('onboardingCompleted');
-            const completedFromLocal = (function(){ try { return localStorage.getItem('onboardingCompleted') === 'true'; } catch(e){ return false; } })();
+            const completedFromLocal = (function () { try { return localStorage.getItem('onboardingCompleted') === 'true'; } catch (e) { return false; } })();
             console.debug('[debug] visibilitychange - storage:', completedFromStorage, 'local:', completedFromLocal, 'onboardingCompletedVar:', onboardingCompleted);
             if (completedFromStorage || completedFromLocal) {
                 document.documentElement.classList.remove('show-onboarding');
@@ -1602,7 +1910,7 @@ window.addEventListener('visibilitychange', async () => {
             }
         } catch (e) {
             // Non-fatal: storage may not be ready yet
-            try { console.debug('[debug] visibilitychange fallback localStorage =>', localStorage.getItem('onboardingCompleted')); } catch (err) {}
+            try { console.debug('[debug] visibilitychange fallback localStorage =>', localStorage.getItem('onboardingCompleted')); } catch (err) { }
         }
     }
 });

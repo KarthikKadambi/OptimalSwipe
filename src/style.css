@@ -1073,11 +1073,11 @@ small {
     overflow-y: auto;
     scrollbar-gutter: stable;
     /* Reserve space for scrollbar to avoid shift */
-    padding: 40px 20px;
+    padding: 32px 20px;
+    /* Tightened vertical buffer */
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     /* Vertical centering */
     -webkit-overflow-scrolling: touch;
 }
@@ -1093,8 +1093,7 @@ small {
 .onboarding-content {
     width: 100%;
     max-width: 1200px;
-    margin: auto 0;
-    /* Vertical centering while respecting scroll */
+    margin: auto;
 }
 
 .onboarding-header {
@@ -1455,10 +1454,12 @@ small {
     }
 
     .main-layout {
-        flex-direction: column;
+        display: flex !important;
+        flex-direction: column !important;
         gap: 12px;
-        align-items: stretch;
-        /* Ensure content takes full width */
+        align-items: stretch !important;
+        width: 100% !important;
+        margin: 0 !important;
     }
 
     .side-nav {
@@ -1501,11 +1502,28 @@ small {
         font-size: 0.9rem;
     }
 
+    .container {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 12px !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+
     .card {
         padding: 16px 12px;
         border-radius: 12px;
-        width: 100%;
-        /* Take full width */
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .tab-content,
+    .tab-pane {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
     }
 
     h1 {
