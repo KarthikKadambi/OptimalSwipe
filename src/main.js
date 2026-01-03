@@ -1072,7 +1072,7 @@ async function showOnboarding() {
                         For the best experience, persistent storage, and full-screen mode, please install OptimalSwipe to your home screen or dock.
                     </p>
                     
-                    <div id="onboardingInstallArea" style="width: 100%; margin-bottom: 24px; display: none;">
+                    <div id="onboardingInstallArea" style="width: 100%; margin-bottom: 24px;">
                         <button id="onboardingInstallBtn" class="btn" style="width: 100%;">
                             📲 Install App
                         </button>
@@ -1377,12 +1377,15 @@ async function showOnboarding() {
                 showSafariInstallGuide();
                 return;
             }
-            if (!deferredPrompt) return;
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            console.log(`User response to onboarding install prompt: ${outcome}`);
-            deferredPrompt = null;
-            updateInstallButtonsVisibility();
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response to onboarding install prompt: ${outcome}`);
+                deferredPrompt = null;
+                updateInstallButtonsVisibility();
+            } else {
+                showChromeInstallGuide();
+            }
         };
     }
 
@@ -1732,40 +1735,42 @@ function updateInstallButtonsVisibility() {
     const isSafariBrowser = isSafari();
     const isInstalled = isStandalone();
 
-    // Show on Chrome/Android if prompt available
-    // OR show on Safari if not standalone (to show instructions)
-    const show = !!deferredPrompt || (isSafariBrowser && !isInstalled);
+    console.debug('[PWA] updateInstallButtonsVisibility:', { isSafariBrowser, isInstalled, hasPrompt: !!deferredPrompt });
+
+    // Ensure we show the install button if not installed
+    const show = !!deferredPrompt || !isInstalled;
 
     if (installBtn) {
         installBtn.style.display = show ? 'block' : 'none';
         if (isSafariBrowser && !isInstalled) {
             installBtn.innerHTML = '<span class="icon">📲</span> Install Guide';
-        } else {
+        } else if (!!deferredPrompt) {
             installBtn.innerHTML = '<span class="icon">📲</span> Install App';
+        } else if (!isInstalled) {
+            installBtn.innerHTML = '<span class="icon">📲</span> Install Guide';
         }
     }
     const onboardingInstallArea = document.getElementById('onboardingInstallArea');
     const onboardingInstalledMessage = document.getElementById('onboardingInstalledMessage');
 
     if (onboardingInstallArea || onboardingInstalledMessage) {
-        if (show) {
-            if (onboardingInstallArea) onboardingInstallArea.style.display = 'block';
-            if (onboardingInstalledMessage) onboardingInstalledMessage.style.display = 'none';
-        } else if (isInstalled) {
+        if (isInstalled) {
             if (onboardingInstallArea) onboardingInstallArea.style.display = 'none';
             if (onboardingInstalledMessage) onboardingInstalledMessage.style.display = 'block';
         } else {
-            // Not installable and not installed (e.g. desktop non-Safari)
-            if (onboardingInstallArea) onboardingInstallArea.style.display = 'none';
+            // Not installed, show the installation area/instructions
+            if (onboardingInstallArea) onboardingInstallArea.style.display = 'block';
             if (onboardingInstalledMessage) onboardingInstalledMessage.style.display = 'none';
-        }
 
-        const onboardingBtn = document.getElementById('onboardingInstallBtn');
-        if (onboardingBtn) {
-            if (isSafariBrowser && !isInstalled) {
-                onboardingBtn.innerHTML = `📲 How to Install on ${isIOS() ? 'iOS' : 'Safari'}`;
-            } else {
-                onboardingBtn.innerHTML = '📲 Install App';
+            const onboardingBtn = document.getElementById('onboardingInstallBtn');
+            if (onboardingBtn) {
+                if (isSafariBrowser) {
+                    onboardingBtn.innerHTML = `📲 How to Install on ${isIOS() ? 'iOS' : 'Safari'}`;
+                } else if (!!deferredPrompt) {
+                    onboardingBtn.innerHTML = '📲 Install OptimalSwipe';
+                } else {
+                    onboardingBtn.innerHTML = '📲 Manual Install Guide';
+                }
             }
         }
 
@@ -1873,17 +1878,107 @@ if (installBtn) {
             showSafariInstallGuide();
             return;
         }
-        if (!deferredPrompt) return;
-        // Show the install prompt
-        deferredPrompt.prompt();
-        // Wait for the user to respond to the prompt
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`User response to the install prompt: ${outcome}`);
-        // We've used the prompt, and can't use it again, throw it away
-        deferredPrompt = null;
-        // Hide the buttons
-        updateInstallButtonsVisibility();
+        if (deferredPrompt) {
+            // Show the install prompt
+            deferredPrompt.prompt();
+            // Wait for the user to respond to the prompt
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response to the install prompt: ${outcome}`);
+            // We've used the prompt, and can't use it again, throw it away
+            deferredPrompt = null;
+            // Hide the buttons
+            updateInstallButtonsVisibility();
+        } else {
+            showChromeInstallGuide();
+        }
     });
+}
+
+function showChromeInstallGuide() {
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const overlay = document.createElement('div');
+    overlay.className = 'safari-install-overlay';
+    overlay.style = `
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1a2032;
+        padding: 32px 24px 64px 24px;
+        border-radius: 24px 24px 0 0;
+        z-index: 100000;
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+        animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        text-align: center;
+        border-top: 2px solid var(--accent-gold);
+    `;
+
+    const instructions = isAndroid
+        ? [
+            `Tap the <strong>three dots</strong> <span style="font-size: 1.2rem; vertical-align: middle;">⋮</span> in the top right.`,
+            `Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.`
+        ]
+        : [
+            `Tap the <strong>Install Icon</strong> <span style="font-size: 1.2rem; vertical-align: middle;">⧉</span> in the address bar (right side).`,
+            `Or click the <strong>three dots</strong> <span style="font-size: 1.2rem; vertical-align: middle;">⋮</span> → <strong>Save and Share</strong> → <strong>Install OptimalSwipe</strong>.`
+        ];
+
+    overlay.innerHTML = `
+        <div style="margin-bottom: 24px;">
+            <div style="font-size: 2.5rem; margin-bottom: 16px;">📲</div>
+            <h2 style="font-family: 'Playfair Display', serif; color: var(--accent-gold); margin-bottom: 12px;">Install OptimalSwipe</h2>
+            <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                The automatic prompt didn't appear. You can still install manually for the best experience.
+            </p>
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.03); border-radius: 16px; padding: 24px; margin-bottom: 24px; text-align: left;">
+            <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
+                <div style="background: var(--accent-gold); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 800;">1</div>
+                <p style="color: var(--text-primary); font-size: 0.9rem;">${instructions[0]}</p>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 16px;">
+                <div style="background: var(--accent-gold); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 800;">2</div>
+                <p style="color: var(--text-primary); font-size: 0.9rem;">${instructions[1]}</p>
+            </div>
+        </div>
+        
+        <div style="background: rgba(244, 196, 48, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 24px; font-size: 0.8rem; color: var(--text-secondary);">
+            <strong>Note:</strong> If you are using an IP address or insecure connection, the browser may disable installation. Try using <strong>localhost</strong> or <strong>HTTPS</strong>.
+        </div>
+        
+        <button id="closeChromeGuide" class="btn" style="width: 100%;">Got It!</button>
+    `;
+
+    const blurEffect = document.createElement('div');
+    blurEffect.style = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(4px);
+        z-index: 99999;
+        animation: fadeIn 0.3s ease;
+    `;
+
+    document.body.appendChild(blurEffect);
+    document.body.appendChild(overlay);
+
+    const close = () => {
+        overlay.style.transform = 'translateY(100%)';
+        overlay.style.transition = 'transform 0.3s ease-in';
+        blurEffect.style.opacity = '0';
+        blurEffect.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => {
+            overlay.remove();
+            blurEffect.remove();
+        }, 300);
+    };
+
+    document.getElementById('closeChromeGuide').onclick = close;
+    blurEffect.onclick = close;
 }
 
 window.addEventListener('appinstalled', () => {
