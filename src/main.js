@@ -24,12 +24,23 @@ function isSafari() {
 
 // Utility: Check if running in standalone mode (installed PWA)
 function isStandalone() {
-    const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches ||
-        window.matchMedia('(display-mode: minimal-ui)').matches ||
+    // Strictly detect if the app is running in its own window
+    const matchesStandalone = window.matchMedia('(display-mode: standalone)').matches ||
         window.matchMedia('(display-mode: fullscreen)').matches ||
-        window.navigator.standalone ||
-        document.referrer.includes('android-app://');
-    console.debug('[PWA] Standalone check:', isStandaloneMode);
+        window.navigator.standalone === true;
+
+    // Some browsers on Android use 'minimal-ui' for installed apps
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const matchesMinimalUI = isAndroid && window.matchMedia('(display-mode: minimal-ui)').matches;
+
+    const isStandaloneMode = matchesStandalone || matchesMinimalUI || document.referrer.includes('android-app://');
+
+    console.debug('[PWA] Standalone check:', {
+        isStandaloneMode,
+        displayMode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'other',
+        navigatorStandalone: window.navigator.standalone
+    });
+
     return !!isStandaloneMode;
 }
 
@@ -1221,6 +1232,15 @@ async function showOnboarding() {
     }
 
     const updateWizardUI = () => {
+        const standalone = isStandalone();
+
+        // Safety: If somehow we are in a browser but on a later step, force back to Step 1
+        if (!standalone && currentStep > 1) {
+            console.warn('[PWA] Not in standalone mode. Reverting to Step 1.');
+            currentStep = 1;
+            storage.set('onboardingCurrentStep', 1);
+        }
+
         // Update views
         overlay.querySelectorAll('.step-view').forEach(view => {
             view.classList.toggle('active', parseInt(view.getAttribute('data-step')) === currentStep);
@@ -1451,6 +1471,7 @@ async function showOnboarding() {
         }
     };
 
+    console.log('App Initializing - v1.1.2');
     updateWizardUI();
     renderOnboardingPresets();
 }
