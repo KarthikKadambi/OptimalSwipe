@@ -1021,6 +1021,12 @@ async function showOnboarding() {
         await storage.set('onboardingCurrentStep', 2);
     }
 
+    // Force back to step 1 if we're in a browser and haven't bridged yet
+    if (!isStandalone() && currentStep > 1) {
+        currentStep = 1;
+        await storage.set('onboardingCurrentStep', 1);
+    }
+
     let hasExported = false;
     let hasLinked = false;
     const selectedPresets = new Set();
