@@ -452,7 +452,11 @@ function renderCards() {
                     <button class="delete-btn" data-id="${card.id}">×</button>
                 </div>
                 <div class="card-categories">
-                    ${card.rewards.map(r => `<span class="category-badge">${r.rate}% ${r.category}</span>`).join('')}
+                    ${card.rewards.map(r => {
+            const boostedRate = r.rate * (card.rewardMultiplier || 1.0);
+            const displayRate = Number.isInteger(boostedRate) ? boostedRate : boostedRate.toFixed(2);
+            return `<span class="category-badge">${displayRate}% ${r.category}</span>`;
+        }).join('')}
                 </div>
             </div>
         `;
@@ -464,12 +468,12 @@ function renderCards() {
             const card = cards.find(c => c.id === id);
             if (!card) return;
 
-            const choiceRewardIndex = card.rewards.findIndex(r => r.choices && r.choices.length > 0);
-            if (choiceRewardIndex === -1) return;
-
-            const selectedCategory = await showCategoryChoiceModal(card.name, card.rewards[choiceRewardIndex].choices);
-            if (selectedCategory) {
-                card.rewards[choiceRewardIndex].category = selectedCategory;
+            const config = await showCardConfigurationModal(card);
+            if (config) {
+                if (config.categoryIndex !== -1) {
+                    card.rewards[config.categoryIndex].category = config.selectedCategory;
+                }
+                card.rewardMultiplier = config.multiplier;
                 await storage.set('cards', cards);
                 renderCards();
             }
@@ -1583,15 +1587,15 @@ window.addCardFromPreset = async function (presetId) {
     newCard.presetId = preset.id;
     newCard.id = Date.now() + Math.random();
 
-    // Check if any reward has multiple choices
-    const choiceRewardIndex = newCard.rewards.findIndex(r => r.choices && r.choices.length > 0);
+    // Configuration flow
+    const config = await showCardConfigurationModal(newCard);
+    if (!config) return; // User cancelled
 
-    if (choiceRewardIndex !== -1) {
-        const choiceReward = newCard.rewards[choiceRewardIndex];
-        const selectedCategory = await showCategoryChoiceModal(newCard.name, choiceReward.choices);
-        if (!selectedCategory) return; // User cancelled
-        newCard.rewards[choiceRewardIndex].category = selectedCategory;
+    // Apply configuration
+    if (config.categoryIndex !== -1) {
+        newCard.rewards[config.categoryIndex].category = config.selectedCategory;
     }
+    newCard.rewardMultiplier = config.multiplier;
 
     cards = [...cards, newCard];
     await storage.set('cards', cards);
@@ -1600,40 +1604,98 @@ window.addCardFromPreset = async function (presetId) {
     updatePaymentCardOptions();
     updateStats();
     switchTab('my-cards');
-    // alert(`${preset.name} added to your wallet!`); (Modal handles feedback now)
+    // alert(`${ preset.name } added to your wallet!`); (Modal handles feedback now)
 };
 
-async function showCategoryChoiceModal(cardName, choices) {
+async function showCardConfigurationModal(card) {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.style.zIndex = '40000';
 
+        const choiceRewardIndex = card.rewards.findIndex(r => r.choices && r.choices.length > 0);
+        const choices = choiceRewardIndex !== -1 ? card.rewards[choiceRewardIndex].choices : null;
+        const currentMultiplier = card.rewardMultiplier || 1.0;
+        const currentBoostPercent = Math.round((currentMultiplier - 1) * 100);
+
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 400px; text-align: center;">
-                <h3 style="margin-bottom: 8px;">Configure ${cardName}</h3>
-                <p class="description" style="margin-bottom: 24px;">Select your active 3% reward category:</p>
-                <div style="display: grid; gap: 10px; text-align: left;">
-                    ${choices.map(c => `
-                        <button class="btn-secondary choice-option" style="justify-content: flex-start; padding: 14px;" data-value="${c}">
-                            <span class="icon" style="margin-right: 10px;">🎯</span> ${c}
-                        </button>
-                    `).join('')}
+            <div class="modal-content" style="max-width: 440px; text-align: left;">
+                <h3 style="margin-bottom: 8px; text-align: center;">Configure ${card.name}</h3>
+                <p class="description" style="margin-bottom: 24px; text-align: center;">Personalize your rewards and boosts.</p>
+                
+                ${choices ? `
+                    <div style="margin-bottom: 24px;">
+                        <label style="font-size: 0.75rem; color: var(--accent-gold); margin-bottom: 12px; display: block;">🎯 Active 3% Category</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            ${choices.map(c => `
+                                <button class="btn-secondary choice-option ${card.rewards[choiceRewardIndex].category === c ? 'selected-choice' : ''}" 
+                                        style="padding: 10px; font-size: 0.8rem; justify-content: center;" data-value="${c}">
+                                    ${c}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''
+            }
+
+                <div style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid var(--border);">
+                    <label style="font-size: 0.75rem; color: var(--accent-emerald); margin-bottom: 8px; display: block;">🚀 Reward Boost (e.g. Preferred Rewards)</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="number" id="boostInput" value="${currentBoostPercent}" step="25" min="0" 
+                               style="width: 80px; text-align: center; font-size: 1.1rem; padding: 8px;" placeholder="0">
+                        <span style="font-weight: 600; font-size: 1.1rem;">% Boost</span>
+                    </div>
+                    <div id="boostPreview" style="font-size: 0.75rem; color: var(--accent-emerald); margin-top: 10px; font-weight: 500;">
+                        ${currentBoostPercent > 0 ? `✨ Increases 3% to ${(3 * currentMultiplier).toFixed(2)}%` : 'No boost active'}
+                    </div>
+                    <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 10px; line-height: 1.4;">
+                        Example: Platinum Honors (75%) makes a 3.0% rate become 5.25%.
+                    </p>
                 </div>
-                <button class="btn-secondary cancel-choice" style="margin-top: 20px; border: none; color: var(--text-muted);">Cancel</button>
+
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button id="saveConfigBtn" class="btn" style="flex: 2;">Save Configuration</button>
+                    <button id="cancelConfigBtn" class="btn-secondary" style="flex: 1;">Cancel</button>
+                </div>
             </div>
         `;
         document.body.appendChild(overlay);
 
+        let selectedCat = choices ? (card.rewards[choiceRewardIndex].category || choices[0]) : null;
+
         overlay.querySelectorAll('.choice-option').forEach(btn => {
             btn.addEventListener('click', () => {
-                const val = btn.getAttribute('data-value');
-                overlay.remove();
-                resolve(val);
+                overlay.querySelectorAll('.choice-option').forEach(b => b.classList.remove('selected-choice'));
+                btn.classList.add('selected-choice');
+                selectedCat = btn.getAttribute('data-value');
             });
         });
 
-        overlay.querySelector('.cancel-choice').onclick = () => {
+        const boostInput = overlay.querySelector('#boostInput');
+        const boostPreview = overlay.querySelector('#boostPreview');
+
+        boostInput.addEventListener('input', () => {
+            const boost = parseFloat(boostInput.value) || 0;
+            const mult = 1 + (boost / 100);
+            if (boost > 0) {
+                boostPreview.innerHTML = `✨ Increases 3% to ${(3 * mult).toFixed(2)}%`;
+            } else {
+                boostPreview.innerHTML = 'No boost active';
+            }
+        });
+
+        overlay.querySelector('#saveConfigBtn').onclick = () => {
+            const boost = parseFloat(overlay.querySelector('#boostInput').value) || 0;
+            const multiplier = 1 + (boost / 100);
+            overlay.remove();
+            resolve({
+                selectedCategory: selectedCat,
+                categoryIndex: choiceRewardIndex,
+                multiplier: multiplier
+            });
+        };
+
+        overlay.querySelector('#cancelConfigBtn').onclick = () => {
             overlay.remove();
             resolve(null);
         };
@@ -1648,7 +1710,7 @@ function addPresetRewardTier() {
     tierDiv.className = 'reward-tier-form';
     tierDiv.id = `preset-tier-${id}`;
     tierDiv.innerHTML = `
-        <div class="form-row">
+            <div class="form-row">
             <div class="form-group">
                 <label>Category</label>
                 <input type="text" class="preset-reward-category" placeholder="e.g. Dining" required>
@@ -1659,21 +1721,21 @@ function addPresetRewardTier() {
             </div>
             <button type="button" class="delete-btn" onclick="document.getElementById('preset-tier-${id}').remove()" style="margin-top: 25px;">×</button>
         </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>Method</label>
-                <select class="preset-reward-method">
-                    <option value="any">Any</option>
-                    <option value="apple-pay">Apple Pay</option>
-                    <option value="other">Physical/Other</option>
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Method</label>
+                    <select class="preset-reward-method">
+                        <option value="any">Any</option>
+                        <option value="apple-pay">Apple Pay</option>
+                        <option value="other">Physical/Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Annual Cap ($0 for none)</label>
+                    <input type="number" class="preset-reward-cap" value="0">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Annual Cap ($0 for none)</label>
-                <input type="number" class="preset-reward-cap" value="0">
-            </div>
-        </div>
-    `;
+        `;
     container.appendChild(tierDiv);
 }
 
@@ -1716,7 +1778,7 @@ async function showLockoutScreen() {
     const lockout = document.createElement('div');
     lockout.className = 'lockout-overlay';
     lockout.innerHTML = `
-        <div class="lockout-content">
+            <div class="lockout-content">
             <span class="lock-icon">🔐</span>
             <h1>Wallet Locked</h1>
             <p style="color: var(--text-secondary); margin-bottom: 30px;">
@@ -1725,8 +1787,8 @@ async function showLockoutScreen() {
             <button id="unlockBtn" class="btn" style="min-width: 240px;">
                 Unlock with Biometrics
             </button>
-        </div>
-    `;
+        </div >
+            `;
     document.body.appendChild(lockout);
 
     document.getElementById('unlockBtn').onclick = async () => {
@@ -1829,7 +1891,7 @@ function showShortcutGuide() {
     overlay.style.zIndex = '10000';
 
     overlay.innerHTML = `
-        <div class="modal-content" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+            < div class="modal-content" style = "max-width: 600px; max-height: 80vh; overflow-y: auto;" >
             <h3 style="margin-bottom: 16px;">🍎 iOS Shortcut Setup</h3>
             
             <div style="background: rgba(244, 196, 48, 0.1); padding: 16px; border-radius: 8px; border-left: 4px solid var(--accent-gold); margin-bottom: 20px;">
@@ -1869,8 +1931,8 @@ function showShortcutGuide() {
             <div class="modal-actions">
                 <button id="closeGuideBtn" class="btn" style="width: 100%;">Got It!</button>
             </div>
-        </div>
-    `;
+        </div >
+            `;
 
     document.body.appendChild(overlay);
 
@@ -1918,7 +1980,7 @@ function updateInstallButtonsVisibility() {
             const onboardingBtn = document.getElementById('onboardingInstallBtn');
             if (onboardingBtn) {
                 if (isSafariBrowser) {
-                    onboardingBtn.innerHTML = `📲 How to Install on ${isIOS() ? 'iOS' : 'Safari'}`;
+                    onboardingBtn.innerHTML = `📲 How to Install on ${isIOS() ? 'iOS' : 'Safari'} `;
                 } else if (!!deferredPrompt) {
                     onboardingBtn.innerHTML = '📲 Install OptimalSwipe';
                 } else {
@@ -1945,16 +2007,16 @@ function showSafariInstallGuide() {
         right: 0;
         background: #1a2032;
         padding: 32px 24px 64px 24px;
-        border-radius: 24px 24px 0 0;
-        z-index: 100000;
-        box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-        animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        text-align: center;
-        border-top: 2px solid var(--accent-gold);
-    `;
+        border - radius: 24px 24px 0 0;
+        z - index: 100000;
+        box - shadow: 0 - 10px 40px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.4s cubic - bezier(0.4, 0, 0.2, 1);
+        text - align: center;
+        border - top: 2px solid var(--accent - gold);
+        `;
 
     const instruction1 = isIos
-        ? `Tap the <strong>Share</strong> button <span style="font-size: 1.2rem; vertical-align: middle;">⎋</span> in Safari's bottom toolbar.`
+        ? `Tap the < strong > Share</strong > button < span style = "font-size: 1.2rem; vertical-align: middle;" >⎋</span > in Safari's bottom toolbar.`
         : `Tap the <strong>Share</strong> button <span style="font-size: 1.2rem; vertical-align: middle;">⎋</span> (top right) or go to <strong>File</strong> in the menu bar.`;
 
     const instruction2 = isIos

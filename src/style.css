@@ -1023,6 +1023,13 @@ small {
     border-radius: 12px;
 }
 
+.selected-choice {
+    border-color: var(--accent-gold) !important;
+    background: rgba(244, 196, 48, 0.1) !important;
+    color: var(--accent-gold) !important;
+    box-shadow: 0 0 10px rgba(244, 196, 48, 0.2);
+}
+
 .import-item {
     display: flex;
     justify-content: space-between;

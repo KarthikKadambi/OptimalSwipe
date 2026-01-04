@@ -33,7 +33,8 @@ export async function getRecommendation(cards, payments, purchaseDetails) {
 
             if (categoryMatch || merchantMatch || reward.category.toLowerCase().includes('all')) {
                 // Check if cap is available
-                let effectiveRate = reward.rate;
+                const multiplier = card.rewardMultiplier || 1.0;
+                let effectiveRate = reward.rate * multiplier;
                 let capStatus = 'unlimited';
 
                 if (reward.spendingCap) {
@@ -46,9 +47,9 @@ export async function getRecommendation(cards, payments, purchaseDetails) {
                         return; // Skip - cap exhausted
                     } else if (remaining < amount) {
                         const fallbackReward = card.rewards.find(r => r.category.toLowerCase().includes('all'));
-                        const fallbackRate = fallbackReward ? fallbackReward.rate : 1;
+                        const fallbackRate = (fallbackReward ? fallbackReward.rate : 1) * multiplier;
 
-                        const highRateEarnings = remaining * (reward.rate / 100);
+                        const highRateEarnings = remaining * (reward.rate * multiplier / 100);
                         const lowRateEarnings = (amount - remaining) * (fallbackRate / 100);
                         effectiveRate = ((highRateEarnings + lowRateEarnings) / amount) * 100;
                         capStatus = `$${remaining.toFixed(2)} remaining`;
