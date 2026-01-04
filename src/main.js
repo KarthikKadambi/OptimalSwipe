@@ -101,17 +101,27 @@ async function startApp() {
         updateBackupStatusUI();
         registerServiceWorker();
         checkDeepLinkImport();
-        addRewardTier();
 
         // Set up events that don't need to be immediate
-        document.getElementById('addRewardBtn').addEventListener('click', addRewardTier);
-        document.getElementById('cardForm').addEventListener('submit', handleCardSubmit);
+        document.getElementById('cardForm')?.addEventListener('submit', handleCardSubmit);
         document.getElementById('paymentForm').addEventListener('submit', handlePaymentSubmit);
-        document.getElementById('recommendationForm').addEventListener('submit', handleRecommendationSubmit);
+        document.getElementById('recommendationForm')?.addEventListener('submit', handleRecommendationSubmit);
         document.getElementById('exportBtn')?.addEventListener('click', () => storage.exportData());
         document.getElementById('vaultExportBtn')?.addEventListener('click', () => storage.exportData());
         document.getElementById('vaultImportFile')?.addEventListener('change', handleImport);
-        document.getElementById('addPresetRewardBtn').addEventListener('click', () => addPresetRewardTier());
+        document.getElementById('addPresetRewardBtn')?.addEventListener('click', () => addPresetRewardTier());
+
+        // Add Card UI Toggles
+        document.getElementById('startNewPresetBtn')?.addEventListener('click', () => {
+            document.getElementById('addCardLanding').style.display = 'none';
+            document.getElementById('customPresetFormArea').style.display = 'block';
+            addPresetRewardTier(); // Start with one tier
+        });
+
+        document.getElementById('backToAddCardLanding')?.addEventListener('click', () => {
+            document.getElementById('addCardLanding').style.display = 'block';
+            document.getElementById('customPresetFormArea').style.display = 'none';
+        });
 
         // Shortcut Automation Toggle Initialization
         const automationToggle = document.getElementById('shortcutAutomationToggle');
@@ -340,10 +350,7 @@ function addRewardTier() {
                 <select id="tier-method-${rewardTierCount}" class="tier-method">
                     <option value="any">Any method</option>
                     <option value="apple-pay">Apple Pay required</option>
-                    <option value="google-pay">Google Pay required</option>
                     <option value="physical-card">Physical card only</option>
-                    <option value="tap">Tap/contactless only</option>
-                    <option value="online">Online only</option>
                 </select>
             </div>
             <div>
@@ -454,8 +461,12 @@ function renderCards() {
                 <div class="card-categories">
                     ${card.rewards.map(r => {
             const boostedRate = r.rate * (card.rewardMultiplier || 1.0);
+            const unit = r.unit || 'cashback';
+            const isPoints = unit !== 'cashback';
             const displayRate = Number.isInteger(boostedRate) ? boostedRate : boostedRate.toFixed(2);
-            return `<span class="category-badge">${displayRate}% ${r.category}</span>`;
+            const symbol = isPoints ? 'x' : '%';
+            const unitLabel = isPoints ? ` ${unit}` : '';
+            return `<span class="category-badge">${displayRate}${symbol}${unitLabel} ${r.category}</span>`;
         }).join('')}
                 </div>
             </div>
@@ -850,6 +861,7 @@ async function handleRecommendationSubmit(e) {
         amount: parseFloat(document.getElementById('recAmount').value),
         paymentMethod: document.getElementById('recPaymentMethod').value,
         merchant: document.getElementById('recMerchant').value,
+        portal: document.getElementById('recPortal').value,
         context: document.getElementById('recContext').value
     };
 
@@ -866,16 +878,24 @@ async function handleRecommendationSubmit(e) {
     }
 
     const best = options[0];
+    const unit = best.unit || 'cashback';
+    const isPoints = unit !== 'cashback';
+    const rewardValueDisplay = isPoints ?
+        `${(purchaseDetails.amount * (best.effectiveRate / 100)).toFixed(0)} ${unit}` :
+        `$${best.cashbackValue.toFixed(2)} cashback`;
+    const rateDisplay = isPoints ? `${(best.effectiveRate).toFixed(1)}x` : `${best.effectiveRate.toFixed(2)}%`;
+
     resultContainer.innerHTML = `
         <div class="recommendation-card">
             <div class="recommendation-title">${best.card.name}</div>
             <div class="recommendation-reason">
-                Earns <strong>$${best.cashbackValue.toFixed(2)}</strong> cashback (${best.effectiveRate.toFixed(2)}%) on this purchase.
+                Earns <strong>${rewardValueDisplay}</strong> (${rateDisplay}) on this purchase.
             </div>
             <div class="recommendation-benefits">
-                <span class="benefit-badge">$${best.cashbackValue.toFixed(2)} cashback</span>
-                <span class="benefit-badge">${best.effectiveRate.toFixed(2)}% rate</span>
+                <span class="benefit-badge">${rewardValueDisplay}</span>
+                <span class="benefit-badge">${rateDisplay} rate</span>
                 <span class="benefit-badge">${best.capStatus}</span>
+                ${best.reward.portal ? `<span class="benefit-badge" style="background: var(--accent-gold); color: #000;">🎯 via ${best.reward.portal}</span>` : ''}
             </div>
         </div>
     `;
@@ -1614,9 +1634,20 @@ async function showCardConfigurationModal(card) {
         overlay.style.zIndex = '40000';
 
         const choiceRewardIndex = card.rewards.findIndex(r => r.choices && r.choices.length > 0);
+        const maxChoices = choiceRewardIndex !== -1 ? (card.rewards[choiceRewardIndex].maxChoices || 1) : 1;
         const choices = choiceRewardIndex !== -1 ? card.rewards[choiceRewardIndex].choices : null;
         const currentMultiplier = card.rewardMultiplier || 1.0;
         const currentBoostPercent = Math.round((currentMultiplier - 1) * 100);
+
+        // Pre-parse currently selected categories, only keeping valid choices
+        const currentCategoryStr = choiceRewardIndex !== -1 ? (card.rewards[choiceRewardIndex].category || '') : '';
+        const rawSelected = currentCategoryStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        let selectedCats = rawSelected.filter(c => choices && choices.includes(c));
+
+        // Ensure at least one valid selection if none match the current state
+        if (selectedCats.length === 0 && choices && choices.length > 0) {
+            selectedCats = [choices[0]];
+        }
 
         overlay.innerHTML = `
             <div class="modal-content" style="max-width: 440px; text-align: left;">
@@ -1625,10 +1656,12 @@ async function showCardConfigurationModal(card) {
                 
                 ${choices ? `
                     <div style="margin-bottom: 24px;">
-                        <label style="font-size: 0.75rem; color: var(--accent-gold); margin-bottom: 12px; display: block;">🎯 Active 3% Category</label>
+                        <label id="selectionCounter" style="font-size: 0.75rem; color: var(--accent-gold); margin-bottom: 12px; display: block;">
+                            🎯 Active Categories (${selectedCats.length}/${maxChoices} selected)
+                        </label>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                             ${choices.map(c => `
-                                <button class="btn-secondary choice-option ${card.rewards[choiceRewardIndex].category === c ? 'selected-choice' : ''}" 
+                                <button class="btn-secondary choice-option ${selectedCats.includes(c) ? 'selected-choice' : ''}" 
                                         style="padding: 10px; font-size: 0.8rem; justify-content: center;" data-value="${c}">
                                     ${c}
                                 </button>
@@ -1648,9 +1681,6 @@ async function showCardConfigurationModal(card) {
                     <div id="boostPreview" style="font-size: 0.75rem; color: var(--accent-emerald); margin-top: 10px; font-weight: 500;">
                         ${currentBoostPercent > 0 ? `✨ Increases 3% to ${(3 * currentMultiplier).toFixed(2)}%` : 'No boost active'}
                     </div>
-                    <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 10px; line-height: 1.4;">
-                        Example: Platinum Honors (75%) makes a 3.0% rate become 5.25%.
-                    </p>
                 </div>
 
                 <div style="display: flex; gap: 12px; margin-top: 12px;">
@@ -1661,13 +1691,31 @@ async function showCardConfigurationModal(card) {
         `;
         document.body.appendChild(overlay);
 
-        let selectedCat = choices ? (card.rewards[choiceRewardIndex].category || choices[0]) : null;
-
+        const counter = overlay.querySelector('#selectionCounter');
         overlay.querySelectorAll('.choice-option').forEach(btn => {
             btn.addEventListener('click', () => {
-                overlay.querySelectorAll('.choice-option').forEach(b => b.classList.remove('selected-choice'));
-                btn.classList.add('selected-choice');
-                selectedCat = btn.getAttribute('data-value');
+                const val = btn.getAttribute('data-value');
+                if (selectedCats.includes(val)) {
+                    // Deselect
+                    selectedCats = selectedCats.filter(c => c !== val);
+                    btn.classList.remove('selected-choice');
+                } else {
+                    // Select
+                    if (selectedCats.length < maxChoices) {
+                        selectedCats.push(val);
+                        btn.classList.add('selected-choice');
+                    } else if (maxChoices === 1) {
+                        // Swap for single choice
+                        overlay.querySelectorAll('.choice-option').forEach(b => b.classList.remove('selected-choice'));
+                        selectedCats = [val];
+                        btn.classList.add('selected-choice');
+                    }
+                }
+
+                // Update counter text
+                if (counter) {
+                    counter.innerText = `🎯 Active Categories (${selectedCats.length}/${maxChoices} selected)`;
+                }
             });
         });
 
@@ -1689,7 +1737,7 @@ async function showCardConfigurationModal(card) {
             const multiplier = 1 + (boost / 100);
             overlay.remove();
             resolve({
-                selectedCategory: selectedCat,
+                selectedCategory: selectedCats.join(', '),
                 categoryIndex: choiceRewardIndex,
                 multiplier: multiplier
             });
@@ -1712,7 +1760,7 @@ function addPresetRewardTier() {
     tierDiv.innerHTML = `
             <div class="form-row">
             <div class="form-group">
-                <label>Category</label>
+                <label>Category Name / Label</label>
                 <input type="text" class="preset-reward-category" placeholder="e.g. Dining" required>
             </div>
             <div class="form-group" style="flex: 0.5;">
@@ -1723,18 +1771,48 @@ function addPresetRewardTier() {
         </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Method</label>
+                    <label>Payment Method</label>
                     <select class="preset-reward-method">
-                        <option value="any">Any</option>
+                        <option value="any">Any method</option>
                         <option value="apple-pay">Apple Pay</option>
-                        <option value="other">Physical/Other</option>
+                        <option value="physical-card">Physical card</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Annual Cap ($0 for none)</label>
+                    <label>Spending Cap ($0 if none)</label>
                     <input type="number" class="preset-reward-cap" value="0">
                 </div>
+                <div class="form-group">
+                    <label>Cap Period</label>
+                    <select class="preset-reward-cap-period">
+                        <option value="none">No cap</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="annual">Annual</option>
+                        <option value="statement">Statement</option>
+                    </select>
+                </div>
             </div>
+            <div class="form-group" style="margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; text-transform: none; letter-spacing: 0;">
+                    <input type="checkbox" class="preset-reward-combined-cap" style="width: auto;">
+                    Combined cap with other tiers
+                </label>
+            </div>
+            <div class="form-group" style="margin-top: 12px;">
+                <label>Choices (comma-separated, optional)</label>
+                <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 12px;">
+                    <input type="text" class="preset-reward-choices" placeholder="e.g. Dining, Online Shopping, Travel">
+                    <input type="number" class="preset-reward-max-choices" value="1" min="1" title="Max Picks">
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 8px;">
+                <label>Specific Merchants (comma-separated, optional)</label>
+                <input type="text" class="preset-reward-merchants" placeholder="e.g. Apple, Uber, Nike">
+            </div>
+            <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                If choices are provided, users pick categories when adding the card. Merchants apply if entered.
+            </p>
         `;
     container.appendChild(tierDiv);
 }
@@ -1744,14 +1822,26 @@ async function handlePresetSubmit(e) {
 
     const tiers = [];
     document.querySelectorAll('.reward-tier-form').forEach(tier => {
-        tiers.push({
+        const choicesInput = tier.querySelector('.preset-reward-choices').value || '';
+        const choices = choicesInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+        const tierData = {
             category: tier.querySelector('.preset-reward-category').value,
             rate: parseFloat(tier.querySelector('.preset-reward-rate').value),
             method: tier.querySelector('.preset-reward-method').value,
             spendingCap: parseFloat(tier.querySelector('.preset-reward-cap').value) || 0,
-            capPeriod: parseFloat(tier.querySelector('.preset-reward-cap').value) > 0 ? 'annual' : 'none',
-            combinedCap: false
-        });
+            capPeriod: tier.querySelector('.preset-reward-cap-period').value,
+            combinedCap: tier.querySelector('.preset-reward-combined-cap').checked,
+            merchants: tier.querySelector('.preset-reward-merchants').value || '',
+            unit: 'cashback'
+        };
+
+        if (choices.length > 0) {
+            tierData.choices = choices;
+            tierData.maxChoices = parseInt(tier.querySelector('.preset-reward-max-choices').value) || 1;
+        }
+
+        tiers.push(tierData);
     });
 
     const newPreset = {
@@ -1760,7 +1850,7 @@ async function handlePresetSubmit(e) {
         issuer: document.getElementById('presetIssuer').value,
         color: document.getElementById('presetColor').value,
         rewards: tiers,
-        perks: "User defined preset"
+        perks: document.getElementById('presetPerks')?.value || "User defined preset"
     };
 
     userPresets = [...userPresets, newPreset];
@@ -1771,8 +1861,14 @@ async function handlePresetSubmit(e) {
     document.getElementById('presetRewardTiers').innerHTML = '<div class="reward-tier-header">Reward Categories</div>';
     presetRewardTierCount = 0;
 
-    switchTab('show-presets');
-    alert('New preset added to library!');
+    // Reset UI visibility if it was in the Add Card flow
+    if (document.getElementById('addCardLanding')) {
+        document.getElementById('addCardLanding').style.display = 'block';
+        document.getElementById('customPresetFormArea').style.display = 'none';
+    }
+
+    // Proactive: Automatically trigger the "Add to Wallet" flow for this new preset
+    await window.addCardFromPreset(newPreset.id);
 }
 async function showLockoutScreen() {
     const lockout = document.createElement('div');

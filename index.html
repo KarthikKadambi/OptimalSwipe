@@ -109,6 +109,55 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             margin-bottom: 12px;
         }
+        /* Switch / toggle styles for Vault -> Automation toggle */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            margin-top: 12px;
+        }
+        .switch-container .description {
+            margin: 0;
+            color: var(--text-muted, #bfc9d6);
+            font-size: 0.95rem;
+        }
+        .switch-container input[type="checkbox"] {
+            display: inline-block;
+            vertical-align: middle;
+            box-sizing: border-box;
+            width: 44px;
+            height: 24px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.06);
+            border-radius: 999px;
+            position: relative;
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: background 0.18s ease, border-color 0.18s ease;
+            flex: 0 0 auto;
+            line-height: 0;
+        }
+        .switch-container input[type="checkbox"]::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 2px;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            transition: left 0.18s ease, transform 0.18s ease;
+        }
+        .switch-container input[type="checkbox"]:checked {
+            background: var(--accent-emerald, #10b981);
+            border-color: transparent;
+        }
+        .switch-container input[type="checkbox"]:checked::after {
+            left: 22px;
+        }
     </style>
     <script>
         // Show the onboarding overlay only when the user hasn't completed onboarding.
@@ -185,22 +234,14 @@
                 </button>
 
                 <div class="nav-group">
-                    <div class="nav-header">Presets</div>
-                    <button class="tab-btn sub-item" data-tab="add-preset">
-                        <span class="icon">➕</span> Add Presets
+                    <button class="tab-btn" data-tab="show-presets">
+                        <span class="icon">🖼️</span> Preset Library
                     </button>
-                    <button class="tab-btn sub-item" data-tab="show-presets">
-                        <span class="icon">🖼️</span> Show Presets
+                    <button class="tab-btn" data-tab="add-card">
+                        <span class="icon">➕</span> Add New Card
                     </button>
-                </div>
-
-                <div class="nav-group">
-                    <div class="nav-header">Cards</div>
-                    <button class="tab-btn sub-item" data-tab="add-card">
-                        <span class="icon">➕</span> Add Cards
-                    </button>
-                    <button class="tab-btn sub-item" data-tab="my-cards">
-                        <span class="icon">💳</span> My Cards
+                    <button class="tab-btn" data-tab="my-cards">
+                        <span class="icon">💳</span> My Wallet
                     </button>
                 </div>
 
@@ -236,12 +277,8 @@
                                 <div class="form-group">
                                     <label for="recPaymentMethod">Payment Method Available</label>
                                     <select id="recPaymentMethod" name="recPaymentMethod">
-                                        <option value="any">Any method</option>
                                         <option value="apple-pay">Apple Pay</option>
-                                        <option value="google-pay">Google Pay</option>
-                                        <option value="physical-card">Physical card only</option>
-                                        <option value="tap">Tap/contactless</option>
-                                        <option value="online">Online payment</option>
+                                        <option value="physical-card">Physical card / Card number</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -249,10 +286,22 @@
                                     <input type="text" id="recMerchant" placeholder="e.g., Uber, Starbucks, Target">
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label>Additional Context (Optional)</label>
-                                <textarea id="recContext"
-                                    placeholder="e.g., international travel, need travel insurance"></textarea>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Booking via Portal?</label>
+                                    <select id="recPortal">
+                                        <option value="none">No/Regular Purchase</option>
+                                        <option value="Capital One Travel">Capital One Travel</option>
+                                        <option value="Chase Travel">Chase Travel</option>
+                                        <option value="Amex Travel">Amex Travel</option>
+                                        <option value="Wells Fargo Rewards">Wells Fargo Rewards</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Additional Context (Optional)</label>
+                                    <textarea id="recContext"
+                                        placeholder="e.g., international travel, need travel insurance"></textarea>
+                                </div>
                             </div>
                             <button type="submit" class="btn">Get Best Card Recommendation</button>
                         </form>
@@ -283,12 +332,8 @@
                             <div class="form-group">
                                 <label for="paymentMethod">Payment Method</label>
                                 <select id="paymentMethod" name="paymentMethod" required>
-                                    <option value="swipe">Card Swipe</option>
                                     <option value="apple-pay">Apple Pay</option>
-                                    <option value="google-pay">Google Pay</option>
-                                    <option value="paypal">PayPal</option>
-                                    <option value="cash">Cash</option>
-                                    <option value="other">Other</option>
+                                    <option value="physical-card">Physical card / Card number</option>
                                 </select>
                             </div>
                             <button type="submit" class="btn">Record Payment</button>
@@ -314,38 +359,81 @@
                     </div>
                 </div>
 
-                <!-- Add Presets (Template Creator) Section -->
-                <div id="add-preset" class="tab-pane">
-                    <div class="card">
-                        <h2><span class="icon">✨</span> Create New Card Preset</h2>
-                        <p class="description">Define a reusable card template with custom reward categories. These will
-                            appear in the Preset Library and Onboarding.</p>
-                        <form id="presetForm">
-                            <div class="form-group">
-                                <label for="presetName">Card Name</label>
-                                <input type="text" id="presetName" placeholder="e.g. Sapphire Preferred" required>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="presetIssuer">Issuer</label>
-                                    <input type="text" id="presetIssuer" placeholder="e.g. Chase" required>
+                <!-- Add Card (Unified Entry) Section -->
+                <div id="add-card" class="tab-pane">
+                    <div id="addCardLanding">
+                        <div class="card" style="text-align: center; padding: 48px 24px;">
+                            <h2><span class="icon">💳</span> Add a New Card</h2>
+                            <p class="description" style="margin-bottom: 32px;">Choose how you'd like to add a card to
+                                your wallet.</p>
+
+                            <div
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 800px; margin: 0 auto;">
+                                <div class="option-card tab-btn" data-tab="show-presets"
+                                    style="cursor: pointer; padding: 32px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 20px; transition: all 0.3s; display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                                    <div style="font-size: 3rem;">📚</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; color: var(--accent-gold);">Browse
+                                        Presets</div>
+                                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">Add
+                                        popular cards like Amex Gold, Sapphire, or Bilt in one tap.</p>
                                 </div>
-                                <div class="form-group">
-                                    <label for="presetColor">Card Color</label>
-                                    <input type="color" id="presetColor" value="#2563eb">
+
+                                <div id="startNewPresetBtn"
+                                    style="cursor: pointer; padding: 32px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 20px; transition: all 0.3s; display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                                    <div style="font-size: 3rem;">✨</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; color: var(--accent-emerald);">
+                                        Create Custom</div>
+                                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">Create a
+                                        custom reward structure for any card in the world.</p>
                                 </div>
                             </div>
-                            <div id="presetRewardTiers">
-                                <div class="reward-tier-header">Reward Categories</div>
-                                <!-- Dynamic reward tiers here -->
-                            </div>
-                            <button type="button" id="addPresetRewardBtn" class="btn-secondary"
-                                style="margin-top: 12px; width: 100%;">
-                                ➕ Add Category
-                            </button>
-                            <button type="submit" class="btn" style="margin-top: 24px; width: 100%;">Save to
-                                Library</button>
-                        </form>
+                        </div>
+                    </div>
+
+                    <div id="customPresetFormArea" style="display: none;">
+                        <button id="backToAddCardLanding" class="btn-secondary"
+                            style="margin-bottom: 16px; width: auto; padding: 8px 16px; font-size: 0.8rem;">
+                            ← Back to Options
+                        </button>
+                        <div class="card">
+                            <h2><span class="icon">✨</span> Create Custom Card Template</h2>
+                            <p class="description">Define your card's rewards. This template will be saved to your
+                                library for future use.</p>
+                            <form id="presetForm">
+                                <div class="form-group">
+                                    <label for="presetName">Card Name</label>
+                                    <input type="text" id="presetName" placeholder="e.g. My Secret Credit Card"
+                                        required>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="presetIssuer">Issuer</label>
+                                        <input type="text" id="presetIssuer" placeholder="e.g. Local Credit Union"
+                                            required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="presetColor">Card Color</label>
+                                        <input type="color" id="presetColor" value="#50c878">
+                                    </div>
+                                </div>
+                                <div id="presetRewardTiers">
+                                    <div class="reward-tier-header">Reward Categories</div>
+                                    <!-- Dynamic reward tiers here -->
+                                </div>
+                                <button type="button" id="addPresetRewardBtn" class="btn-secondary"
+                                    style="margin-top: 12px; width: 100%;">
+                                    ➕ Add Category
+                                </button>
+                                <div class="form-group" style="margin-top: 16px;">
+                                    <label for="presetPerks">Additional Benefits & Perks</label>
+                                    <textarea id="presetPerks"
+                                        placeholder="e.g., No annual fee, No foreign transaction fees, Travel insurance, roadside assistance"
+                                        rows="2"></textarea>
+                                </div>
+                                <button type="submit" class="btn" style="margin-top: 24px; width: 100%;">Create Template
+                                    & Add to Wallet</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
 
@@ -360,52 +448,10 @@
                     </div>
                 </div>
 
-                <!-- Add Card Section -->
-                <div id="add-card" class="tab-pane">
-                    <div class="card">
-                        <h2><span class="icon">💳</span> Add Credit Card</h2>
-                        <div class="preset-nudge"
-                            style="margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">
-                            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
-                                Want to add a popular card? Save time by using our preset library.
-                            </p>
-                            <button class="btn-secondary tab-btn" data-tab="show-presets" style="width: 100%;">
-                                <span class="icon">🖼️</span> Browse Preset Library
-                            </button>
-                        </div>
-                        <form id="cardForm">
-                            <div class="form-group">
-                                <label for="cardName">Card Name</label>
-                                <input type="text" id="cardName" placeholder="e.g., Apple Card" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="cardIssuer">Card Issuer</label>
-                                <input type="text" id="cardIssuer" placeholder="e.g., Goldman Sachs" required>
-                            </div>
-                            <div
-                                style="margin: 24px 0; padding: 20px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid var(--accent-gold);">
-                                <h3
-                                    style="font-size: 1.1rem; margin-bottom: 16px; color: var(--accent-gold); font-family: ui-serif, Georgia, serif;">
-                                    Rewards Structure</h3>
-                                <div id="rewardsContainer"></div>
-                                <button type="button" class="btn-secondary" id="addRewardBtn"
-                                    style="margin-top: 12px; width: 100%; padding: 10px;">+ Add Reward Tier</button>
-                            </div>
-                            <div class="form-group">
-                                <label for="cardPerks">Additional Benefits & Perks</label>
-                                <textarea id="cardPerks"
-                                    placeholder="e.g., No annual fee, No foreign transaction fees, Purchase protection, Extended warranty, Travel insurance, Roadside assistance"
-                                    rows="3"></textarea>
-                            </div>
-                            <button type="submit" class="btn">Add Card</button>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- My Cards Section -->
+                <!-- My Wallet Section -->
                 <div id="my-cards" class="tab-pane">
                     <div class="card">
-                        <h2><span class="icon">🗂️</span> My Cards</h2>
+                        <h2><span class="icon">🗂️</span> My Wallet</h2>
                         <div id="cardsList"></div>
                     </div>
                 </div>
@@ -422,12 +468,15 @@
                                 database. Depending on your browser, this data can be in one of two modes:</p>
                             <ul class="description"
                                 style="margin-top: 8px; margin-bottom: 8px; list-style-type: none; padding-left: 0;">
-                                <li>🏠 <strong>Persistent:</strong> The gold standard. The browser guarantees your data
+                                <li>🏠 <strong>Persistent:</strong> The gold standard. The browser guarantees your
+                                    data
                                     won't be cleared during automatic cleanup to save space.</li>
-                                <li>📦 <strong>Best Effort:</strong> The default. The browser may delete this data if
+                                <li>📦 <strong>Best Effort:</strong> The default. The browser may delete this data
+                                    if
                                     your device runs very low on storage.</li>
                             </ul>
-                            <p class="description"><strong>Tip:</strong> If you see "Best Effort," try choosing "Add to
+                            <p class="description"><strong>Tip:</strong> If you see "Best Effort," try choosing "Add
+                                to
                                 Home Screen" (PWA) to help the browser grant Persistent status. Regular backups are
                                 always recommended.</p>
                             <div id="storageHealth" class="storage-health">
@@ -440,8 +489,10 @@
                             <h3>🔄 Live Sync (Desktop Only)</h3>
                             <p class="description">Link a file on your device (or cloud). Every change you make is
                                 instantly
-                                saved. <strong>Note:</strong> This feature is currently supported in Chrome, Edge, and
-                                Opera desktop. Safari and Mobile users should use manual backups or export/import.</p>
+                                saved. <strong>Note:</strong> This feature is currently supported in Chrome, Edge,
+                                and
+                                Opera desktop. Safari and Mobile users should use manual backups or export/import.
+                            </p>
                             <div id="vaultSyncArea">
                                 <!-- Populated by main.js -->
                             </div>
@@ -450,29 +501,34 @@
                         <div class="vault-section mobile-only"
                             style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
                             <h3>📱 Sync</h3>
-                            <p class="description">Import transactions from Apple Wallet and keep your data backed up:
+                            <p class="description">Import transactions from Apple Wallet and keep your data backed
+                                up:
                             </p>
 
                             <div
                                 style="margin-top: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid var(--accent-gold);">
                                 <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-gold);">💾
                                     Manual Backup (Recommended)</h4>
-                                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Save
-                                    your data to iCloud Drive. We recommend creating an <strong>OptimalSwipe</strong>
+                                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                                    Save
+                                    your data to iCloud Drive. We recommend creating an
+                                    <strong>OptimalSwipe</strong>
                                     folder to keep your backups organized.
                                 </p>
                                 <button id="mobileShareBackupBtn" class="btn" style="width: 100%; margin-bottom: 8px;">
                                     <span class="icon">📤</span> Share Backup File
                                 </button>
                                 <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">
-                                    Tap "Share", then choose "Save to Files" → Pick your <strong>OptimalSwipe</strong>
+                                    Tap "Share", then choose "Save to Files" → Pick your
+                                    <strong>OptimalSwipe</strong>
                                     folder
                                 </p>
                             </div>
 
                             <div
                                 style="margin-top: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid var(--accent-emerald);">
-                                <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-emerald);">🍎
+                                <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-emerald);">
+                                    🍎
                                     iOS Shortcut (Advanced)</h4>
                                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
                                     Auto-import transactions from Apple Wallet.</p>
@@ -501,7 +557,8 @@
                         <div class="vault-section"
                             style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
                             <h3>🗄️ Storage Reliability</h3>
-                            <p class="description">Request the browser to never delete your local data even if storage
+                            <p class="description">Request the browser to never delete your local data even if
+                                storage
                                 is
                                 low.</p>
                             <div id="storageHealth" style="margin-bottom: 16px;">
@@ -518,7 +575,8 @@
                             style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
                             <h3>📥 One-Time Restore</h3>
                             <p class="description">Import a previously exported backup file to replace your current
-                                local data. Use this for recovery or one-time migrations. <strong>Warning:</strong> This
+                                local data. Use this for recovery or one-time migrations. <strong>Warning:</strong>
+                                This
                                 will overwrite all current local cards.</p>
                             <label for="vaultImportFile" class="btn-secondary"
                                 style="display: inline-block; cursor: pointer;">Select Backup File</label>
@@ -527,7 +585,8 @@
                         <div class="vault-section"
                             style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
                             <h3>🤖 Automation</h3>
-                            <p class="description">Automatically trigger the <strong>'RecommendCard'</strong> shortcut
+                            <p class="description">Automatically trigger the <strong>'RecommendCard'</strong>
+                                shortcut
                                 on iOS/macOS when you get a recommendation.</p>
                             <label class="switch-container"
                                 style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin-top: 12px;">
@@ -548,12 +607,16 @@
 
                         <div class="vault-section" style="margin-top: 32px;">
                             <h3>⚠️ Reset App & Data</h3>
-                            <p class="description desktop-only"><strong>DANGER:</strong> This will permanently wipe all
+                            <p class="description desktop-only"><strong>DANGER:</strong> This will permanently wipe
+                                all
                                 local cards,
-                                payments, and custom presets from this browser. This does <strong>not</strong> delete
-                                your linked backup file, but it will disconnect you from it. Use this to start totally
+                                payments, and custom presets from this browser. This does <strong>not</strong>
+                                delete
+                                your linked backup file, but it will disconnect you from it. Use this to start
+                                totally
                                 fresh.</p>
-                            <p class="description mobile-only"><strong>DANGER:</strong> This will permanently wipe all
+                            <p class="description mobile-only"><strong>DANGER:</strong> This will permanently wipe
+                                all
                                 local cards,
                                 payments, and custom presets from this device. Use this to start totally fresh.</p>
                             <button id="resetAppBtn" class="btn-danger">

@@ -31,10 +31,20 @@ export async function getRecommendation(cards, payments, purchaseDetails) {
             const categoryMatch = reward.category.toLowerCase().includes(category.toLowerCase()) ||
                 category.toLowerCase().includes(reward.category.toLowerCase());
 
-            if (categoryMatch || merchantMatch || reward.category.toLowerCase().includes('all')) {
+            // Check portal match
+            const portalMatch = !reward.portal || reward.portal === purchaseDetails.portal;
+
+            if ((categoryMatch || merchantMatch || reward.category.toLowerCase().includes('all')) && portalMatch) {
                 // Check if cap is available
                 const multiplier = card.rewardMultiplier || 1.0;
                 let effectiveRate = reward.rate * multiplier;
+
+                // Handle Bilt Rent Day (Double Points on 1st of month, except Rent)
+                const isFirstOfMonth = new Date().getDate() === 1;
+                if (isFirstOfMonth && card.rentDayBoost && reward.category.toLowerCase() !== 'rent') {
+                    effectiveRate *= 2;
+                }
+
                 let capStatus = 'unlimited';
 
                 if (reward.spendingCap) {
@@ -67,7 +77,9 @@ export async function getRecommendation(cards, payments, purchaseDetails) {
                     cashbackValue: cashbackValue,
                     capStatus: capStatus,
                     categoryMatch: categoryMatch,
-                    merchantMatch: merchantMatch
+                    merchantMatch: merchantMatch,
+                    portalMatch: portalMatch,
+                    unit: reward.unit || 'cashback'
                 });
             }
         });
