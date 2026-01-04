@@ -77,9 +77,9 @@ export const storage = {
     // Export all app data to a JSON file
     async exportData() {
         try {
-            const allKeys = ['cards', 'payments', 'userPresets', 'biometricEnabled']; // Explicit keys for our app
+            const allKeys = ['cards', 'payments', 'userPresets', 'biometricEnabled', 'onboardingCompleted'];
             const data = {
-                version: '2.0.0', // Updated version for IDB
+                version: '2.0.0',
                 exportDate: new Date().toISOString()
             };
 
@@ -91,7 +91,7 @@ export const storage = {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `optimalswipe_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `OptimalSwipe_Vault.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -100,6 +100,29 @@ export const storage = {
             console.error('Export error:', error);
             alert('Export failed. Check console for details.');
         }
+    },
+
+    // File System Access API: Create a NEW file for syncing
+    async createBackupFile() {
+        if (this.supportsFileSystemApi()) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: 'OptimalSwipe_Vault.json',
+                    types: [{
+                        description: 'JSON Backup File',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                });
+                await set('backup_file_handle', handle);
+                return handle;
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('File creation failed:', error);
+                }
+                return null;
+            }
+        }
+        return null;
     },
 
     // Import data from a JSON file

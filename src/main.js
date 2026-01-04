@@ -134,11 +134,13 @@ async function startApp() {
 
     // Backup & Sync listeners
     document.addEventListener('click', async (e) => {
-        if (e.target.id === 'linkBackupBtn') {
-            const handle = await storage.linkBackupFile();
+        if (e.target.id === 'linkBackupBtn' || e.target.id === 'createBackupBtn') {
+            const isCreate = e.target.id === 'createBackupBtn';
+            const handle = isCreate ? await storage.createBackupFile() : await storage.linkBackupFile();
+
             if (handle) {
-                // If it's a native handle (Chrome), we should also pull once
-                if (!handle.isFallback) {
+                // If it's a native handle (Chrome) and we linked an existing file, pull once
+                if (!handle.isFallback && !isCreate) {
                     await storage.pullFromLinkedFile();
                 }
 
@@ -729,9 +731,19 @@ async function updateBackupStatusUI() {
                 `;
             }
         } else {
-            // Enable linking for all desktop browsers (even those without native API via fallback)
+            // Enable linking for all desktop browsers
             vaultHtml += `
-                <button id="linkBackupBtn" class="btn-secondary" style="width: 100%;">Link Local Backup File</button>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button id="createBackupBtn" class="btn" style="width: 100%;">
+                        <span class="icon">📁</span> Create New iCloud Vault
+                    </button>
+                    <button id="linkBackupBtn" class="btn-secondary" style="width: 100%;">
+                        <span class="icon">🔗</span> Link Existing File
+                    </button>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 4px;">
+                        Tip: Create an "OptimalSwipe" folder in your iCloud Drive and save your vault there for the best experience.
+                    </p>
+                </div>
             `;
         }
         vaultHtml += `</div>`;
@@ -1698,7 +1710,7 @@ async function handleMobileShareBackup() {
 
         const jsonString = JSON.stringify(data, null, 2);
         const blob = new Blob([jsonString], { type: 'application/json' });
-        const fileName = `optimalswipe_backup_${new Date().toISOString().split('T')[0]}.json`;
+        const fileName = `OptimalSwipe_Vault.json`;
 
         // Check if Web Share API is available
         if (navigator.share && navigator.canShare) {
@@ -1708,7 +1720,7 @@ async function handleMobileShareBackup() {
                 await navigator.share({
                     files: [file],
                     title: 'OptimalSwipe Backup',
-                    text: 'Save this backup to iCloud Drive or Files app'
+                    text: 'Save this to your "OptimalSwipe" folder in iCloud Drive'
                 });
 
                 await storage.updateBackupInfo(data.payments.length);
