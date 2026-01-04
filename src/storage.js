@@ -152,8 +152,6 @@ export const storage = {
         });
     },
 
-
-
     // File System Access API: Link an EXISTING file for syncing
     async linkBackupFile() {
         if (this.supportsFileSystemApi()) {
