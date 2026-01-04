@@ -17,6 +17,11 @@ function isIOS() {
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+// Utility: Detect Apple Devices (iOS and macOS) for Shortcuts support
+function isApple() {
+    return isIOS() || /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent);
+}
+
 // Utility: Detect Safari Browser (includes macOS and iOS)
 function isSafari() {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -107,6 +112,17 @@ async function startApp() {
         document.getElementById('vaultExportBtn')?.addEventListener('click', () => storage.exportData());
         document.getElementById('vaultImportFile')?.addEventListener('change', handleImport);
         document.getElementById('addPresetRewardBtn').addEventListener('click', () => addPresetRewardTier());
+
+        // Shortcut Automation Toggle Initialization
+        const automationToggle = document.getElementById('shortcutAutomationToggle');
+        if (automationToggle) {
+            const enabled = await storage.get('enableShortcutsAutomation') !== false;
+            automationToggle.checked = enabled;
+            automationToggle.addEventListener('change', async (e) => {
+                await storage.set('enableShortcutsAutomation', e.target.checked);
+                console.log('[Shortcut] Automation enabled:', e.target.checked);
+            });
+        }
     };
 
     if (window.requestIdleCallback) {
@@ -820,13 +836,15 @@ async function handleRecommendationSubmit(e) {
         </div>
     `;
 
-    // Run iOS Shortcut if on mobile
-    if (isMobileDevice()) {
+    // Run iOS Shortcut if on an Apple device and enabled
+    const enableShortcutsAutomation = await storage.get('enableShortcutsAutomation') !== false;
+    if (isApple() && enableShortcutsAutomation) {
         const amount = purchaseDetails.amount || 0;
         const category = purchaseDetails.category || '';
         // Construct input exactly as user requested: amount=X%26category=Y
         const shortcutUrl = `shortcuts://run-shortcut?name=RecommendCard&input=amount=${amount}%26category=${encodeURIComponent(category)}`;
 
+        console.log('[Shortcut] Triggering:', shortcutUrl);
         // Use a slight delay to ensure UI renders before app switch
         setTimeout(() => {
             window.location.href = shortcutUrl;
