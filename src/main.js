@@ -433,20 +433,48 @@ function renderCards() {
         container.innerHTML = '<div class="empty-state">No cards added yet.</div>';
         return;
     }
-    container.innerHTML = cards.map(card => `
-        <div class="card-item">
-            <div class="card-item-header">
-                <div>
-                    <div class="card-name">${card.name}</div>
-                    <div class="card-issuer">${card.issuer}</div>
+    container.innerHTML = cards.map(card => {
+        const hasChoices = card.rewards.some(r => r.choices && r.choices.length > 0);
+        return `
+            <div class="card-item">
+                <div class="card-item-header">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div>
+                            <div class="card-name">${card.name}</div>
+                            <div class="card-issuer">${card.issuer}</div>
+                        </div>
+                        ${hasChoices ? `
+                            <button class="configure-card-btn" data-id="${card.id}" title="Change Category" style="background: none; border: none; padding: 4px; color: var(--accent-gold); cursor: pointer; display: flex; align-items: center;">
+                                <span class="icon" style="font-size: 1.1rem;">⚙️</span>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <button class="delete-btn" data-id="${card.id}">×</button>
                 </div>
-                <button class="delete-btn" data-id="${card.id}">×</button>
+                <div class="card-categories">
+                    ${card.rewards.map(r => `<span class="category-badge">${r.rate}% ${r.category}</span>`).join('')}
+                </div>
             </div>
-            <div class="card-categories">
-                ${card.rewards.map(r => `<span class="category-badge">${r.rate}% ${r.category}</span>`).join('')}
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
+
+    container.querySelectorAll('.configure-card-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const id = Number(e.currentTarget.getAttribute('data-id'));
+            const card = cards.find(c => c.id === id);
+            if (!card) return;
+
+            const choiceRewardIndex = card.rewards.findIndex(r => r.choices && r.choices.length > 0);
+            if (choiceRewardIndex === -1) return;
+
+            const selectedCategory = await showCategoryChoiceModal(card.name, card.rewards[choiceRewardIndex].choices);
+            if (selectedCategory) {
+                card.rewards[choiceRewardIndex].category = selectedCategory;
+                await storage.set('cards', cards);
+                renderCards();
+            }
+        });
+    });
 
     container.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
@@ -1547,14 +1575,23 @@ function renderPresetsLibrary() {
 
 window.addCardFromPreset = async function (presetId) {
     const allPresets = [...cardPresets, ...userPresets];
-    const preset = allPresets.find(p => p.id === presetId);
+    let preset = allPresets.find(p => p.id === presetId);
     if (!preset) return;
 
-    const newCard = {
-        ...preset,
-        presetId: preset.id,
-        id: Date.now() + Math.random()
-    };
+    // Deep copy card so we don't mutate the global preset
+    const newCard = JSON.parse(JSON.stringify(preset));
+    newCard.presetId = preset.id;
+    newCard.id = Date.now() + Math.random();
+
+    // Check if any reward has multiple choices
+    const choiceRewardIndex = newCard.rewards.findIndex(r => r.choices && r.choices.length > 0);
+
+    if (choiceRewardIndex !== -1) {
+        const choiceReward = newCard.rewards[choiceRewardIndex];
+        const selectedCategory = await showCategoryChoiceModal(newCard.name, choiceReward.choices);
+        if (!selectedCategory) return; // User cancelled
+        newCard.rewards[choiceRewardIndex].category = selectedCategory;
+    }
 
     cards = [...cards, newCard];
     await storage.set('cards', cards);
@@ -1563,8 +1600,45 @@ window.addCardFromPreset = async function (presetId) {
     updatePaymentCardOptions();
     updateStats();
     switchTab('my-cards');
-    alert(`${preset.name} added to your wallet!`);
+    // alert(`${preset.name} added to your wallet!`); (Modal handles feedback now)
 };
+
+async function showCategoryChoiceModal(cardName, choices) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.style.zIndex = '40000';
+
+        overlay.innerHTML = `
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <h3 style="margin-bottom: 8px;">Configure ${cardName}</h3>
+                <p class="description" style="margin-bottom: 24px;">Select your active 3% reward category:</p>
+                <div style="display: grid; gap: 10px; text-align: left;">
+                    ${choices.map(c => `
+                        <button class="btn-secondary choice-option" style="justify-content: flex-start; padding: 14px;" data-value="${c}">
+                            <span class="icon" style="margin-right: 10px;">🎯</span> ${c}
+                        </button>
+                    `).join('')}
+                </div>
+                <button class="btn-secondary cancel-choice" style="margin-top: 20px; border: none; color: var(--text-muted);">Cancel</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelectorAll('.choice-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const val = btn.getAttribute('data-value');
+                overlay.remove();
+                resolve(val);
+            });
+        });
+
+        overlay.querySelector('.cancel-choice').onclick = () => {
+            overlay.remove();
+            resolve(null);
+        };
+    });
+}
 
 function addPresetRewardTier() {
     const container = document.getElementById('presetRewardTiers');

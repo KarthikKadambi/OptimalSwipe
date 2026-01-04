@@ -92,7 +92,15 @@ export const cardPresets = [
         issuer: "Bank of America",
         color: "#dc2626",
         rewards: [
-            { rate: 3.0, category: "Category of Choice", method: "any", capPeriod: "quarterly", spendingCap: 2500, combinedCap: true },
+            {
+                rate: 3.0,
+                category: "Category of Choice",
+                choices: ["Dining", "Online Shopping", "Travel", "Gas", "Drug Stores", "Home Improvement"],
+                method: "any",
+                capPeriod: "quarterly",
+                spendingCap: 2500,
+                combinedCap: true
+            },
             { rate: 2.0, category: "Groceries", method: "any", capPeriod: "quarterly", spendingCap: 2500, combinedCap: true },
             { rate: 1.0, category: "All Other", categoryMatch: "all", method: "any", capPeriod: "none", spendingCap: 0, combinedCap: false }
         ],
