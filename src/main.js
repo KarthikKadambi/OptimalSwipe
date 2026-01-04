@@ -905,8 +905,11 @@ async function handleRecommendationSubmit(e) {
     if (isApple() && enableShortcutsAutomation) {
         const amount = purchaseDetails.amount || 0;
         const category = purchaseDetails.category || '';
-        // Construct input exactly as user requested: amount=X%26category=Y
-        const shortcutUrl = `shortcuts://run-shortcut?name=RecommendCard&input=amount=${amount}%26category=${encodeURIComponent(category)}`;
+        const paymentMethod = purchaseDetails.paymentMethod || '';
+        const merchant = purchaseDetails.merchant || '';
+        const portal = purchaseDetails.portal || '';
+        // Construct input: amount=X%26category=Y%26paymentMethod=Z%26merchant=A%26portal=B
+        const shortcutUrl = `shortcuts://run-shortcut?name=RecommendCard&input=amount=${amount}%26category=${encodeURIComponent(category)}%26paymentMethod=${encodeURIComponent(paymentMethod)}%26merchant=${encodeURIComponent(merchant)}%26portal=${encodeURIComponent(portal)}`;
 
         console.log('[Shortcut] Triggering:', shortcutUrl);
         // Use a slight delay to ensure UI renders before app switch
