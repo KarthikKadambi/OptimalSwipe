@@ -1153,6 +1153,7 @@ async function showOnboarding() {
         <div class="onboarding-content">
             <div class="onboarding-header">
                 <h1>Welcome to OptimalSwipe</h1>
+                <p class="hook" style="margin:4px 0 8px; color:var(--text-muted,#6b7280); font-size:0.95rem; font-weight:600;">Always swipe the right card. 100% private.</p>
                 <div class="onboarding-stepper">
                     <div class="step-indicator active" data-step="1">
                         <div class="dot">1</div>
@@ -1177,6 +1178,7 @@ async function showOnboarding() {
                         <span>Secure</span>
                     </div>
                 </div>
+                <div id="onboardingStepCaption" style="font-size:0.85rem;color:var(--text-secondary);margin-top:8px;text-align:center;">Step ${currentStep} of ${isMobile ? 3 : 5} · Takes ~2 minutes</div>
             </div>
             
             <!-- Step 1: PWA Installation -->
@@ -1185,13 +1187,16 @@ async function showOnboarding() {
                     <span class="icon-large">📲</span>
                     <h2>Install OptimalSwipe</h2>
                     <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
-                        For the best experience, persistent storage, and full-screen mode, please install OptimalSwipe to your home screen or dock.
+                        Install to unlock offline access, faster recommendations, and secure local storage.
                     </p>
                     
                     <div id="onboardingInstallArea" style="width: 100%; margin-bottom: 24px;">
                         <button id="onboardingInstallBtn" class="btn" style="width: 100%;">
                             📲 Install App
                         </button>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; text-align: center;">
+                            <span class="icon">🔒</span> No bank logins. No servers.</span>
+                        </div>
                     </div>
 
                     <div id="onboardingBrowserAdvice" style="margin-bottom: 24px; padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); width: 100%; font-size: 0.85rem;">
@@ -1352,6 +1357,15 @@ async function showOnboarding() {
             ind.classList.toggle('active', stepNum === currentStep);
             ind.classList.toggle('completed', stepNum < currentStep);
         });
+
+        // Update caption under the stepper (e.g., "Step 1 of 5 · Takes ~2 minutes")
+        try {
+            const totalSteps = overlay.querySelectorAll('.step-indicator').length || 1;
+            const captionEl = overlay.querySelector('#onboardingStepCaption');
+            if (captionEl) captionEl.textContent = `Step ${currentStep} of ${totalSteps} · Takes ~2 minutes`;
+        } catch (e) {
+            console.debug('Failed to update onboarding step caption', e);
+        }
 
         // Update footer buttons
         const prevBtn = document.getElementById('prevStep');
@@ -2106,16 +2120,16 @@ function showSafariInstallGuide() {
         right: 0;
         background: #1a2032;
         padding: 32px 24px 64px 24px;
-        border - radius: 24px 24px 0 0;
-        z - index: 100000;
-        box - shadow: 0 - 10px 40px rgba(0, 0, 0, 0.5);
-        animation: slideUp 0.4s cubic - bezier(0.4, 0, 0.2, 1);
-        text - align: center;
-        border - top: 2px solid var(--accent - gold);
-        `;
+        border-radius: 24px 24px 0 0;
+        z-index: 100000;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        text-align: center;
+        border-top: 2px solid var(--accent-gold);
+    `;
 
     const instruction1 = isIos
-        ? `Tap the < strong > Share</strong > button < span style = "font-size: 1.2rem; vertical-align: middle;" >⎋</span > in Safari's bottom toolbar.`
+        ? `Tap the <strong>Share</strong> button <span style="font-size: 1.2rem; vertical-align: middle;">⎋</span> in Safari's bottom toolbar.`
         : `Tap the <strong>Share</strong> button <span style="font-size: 1.2rem; vertical-align: middle;">⎋</span> (top right) or go to <strong>File</strong> in the menu bar.`;
 
     const instruction2 = isIos
@@ -2127,7 +2141,7 @@ function showSafariInstallGuide() {
             <div style="font-size: 2.5rem; margin-bottom: 16px;">📲</div>
             <h2 style="font-family: 'Playfair Display', serif; color: var(--accent-gold); margin-bottom: 12px;">Install OptimalSwipe</h2>
             <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
-                For the best experience, install OptimalSwipe to your ${isIos ? 'home screen' : 'dock'}. This enables full-screen mode and persistent storage.
+                Install OptimalSwipe to your ${isIos ? 'home screen' : 'dock'} to unlock offline access, faster recommendations, and secure local storage. This enables full-screen mode and persistent storage.
             </p>
         </div>
         
