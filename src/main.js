@@ -1152,7 +1152,7 @@ async function showOnboarding() {
         <div class="onboarding-scroll-area">
         <div class="onboarding-content">
             <div class="onboarding-header">
-                <h1>Welcome to OptimalSwipe</h1>
+                <h3>Welcome to OptimalSwipe</h3>
                 <p class="hook" style="margin:4px 0 8px; color:var(--text-muted,#6b7280); font-size:0.95rem; font-weight:600;">Always swipe the right card. 100% private.</p>
                 <div class="onboarding-stepper">
                     <div class="step-indicator active" data-step="1">
@@ -1185,7 +1185,7 @@ async function showOnboarding() {
             <div class="step-view active" data-step="1">
                 <div class="onboarding-action-card">
                     <span class="icon-large">📲</span>
-                    <h2>Install OptimalSwipe</h2>
+                    <h3>Install OptimalSwipe</h3>
                     <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
                         Install to unlock offline access, faster recommendations, and secure local storage.
                     </p>
@@ -1248,7 +1248,7 @@ async function showOnboarding() {
             <div class="step-view" data-step="3">
                 <div class="onboarding-action-card">
                     <span class="icon-large">💾</span>
-                    <h2>Establish Your Data Vault</h2>
+                    <h3>Establish Your Data Vault</h3>
                     <p style="color: var(--text-secondary); margin-bottom: 24px;">
                         OptimalSwipe works 100% locally. To ensure your data is safe and portable, we'll create your first encrypted backup file.
                     </p>
@@ -1272,7 +1272,7 @@ async function showOnboarding() {
             <div class="step-view" data-step="4">
                 <div class="onboarding-action-card">
                     <span class="icon-large">🔄</span>
-                    <h2>Enable Universal Live Sync</h2>
+                    <h3>Enable Universal Live Sync</h3>
                     <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
                         Establish a live link to your backup file. Once linked, every change you make will be automatically saved directly to your linked file!
                     </p>
@@ -1299,7 +1299,7 @@ async function showOnboarding() {
             <div class="step-view" data-step="5">
                 <div class="onboarding-action-card">
                     <span class="icon-large">🔐</span>
-                    <h2>Secure Your Wallet</h2>
+                    <h3>Secure Your Wallet</h3>
                     <p style="color: var(--text-secondary); margin-bottom: 24px; text-align: center;">
                         Enable Biometric Unlock (FaceID/TouchID) to keep your wallet private. Your biometric data never leaves your device's secure enclave.
                     </p>
@@ -1893,7 +1893,7 @@ async function showLockoutScreen() {
     lockout.innerHTML = `
             <div class="lockout-content">
             <span class="lock-icon">🔐</span>
-            <h1>Wallet Locked</h1>
+            <h3>Wallet Locked</h3>
             <p style="color: var(--text-secondary); margin-bottom: 30px;">
                 OptimalSwipe is locked for your privacy.
             </p>

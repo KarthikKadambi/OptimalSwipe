@@ -13,6 +13,8 @@
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <title>OptimalSwipe - Smart Credit Card Manager</title>
+    <link rel="canonical" href="https://karthikkadambi.github.io/OptimalSwipe/">
+    <meta name="keywords" content="OptimalSwipe, credit cards, rewards, credit card rewards, card manager, privacy-first, local-first, PWA, wallet, cashback, travel rewards, card presets, card recommendations">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="modulepreload" href="src/main.js">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -181,8 +183,8 @@
     <div id="onboardingOverlay" class="onboarding-overlay">
         <div class="onboarding-scroll-area">
             <div class="onboarding-content">
-                <div class="onboarding-header">
-                    <h1 style="text-align: center;">Welcome to OptimalSwipe</h1>
+                    <div class="onboarding-header">
+                    <h2 style="text-align: center;">Welcome to OptimalSwipe</h2>
                     <p class="tagline-loading">SETTING UP YOUR SMART WALLET</p>
                 </div>
                 <!-- Physical Skeleton Cards to fix LCP -->
@@ -319,7 +321,7 @@
                 <!-- Record Payment Section -->
                 <div id="payment" class="tab-pane">
                     <div class="card">
-                        <h2><span class="icon">💵</span> Record Payment</h2>
+                        <h3><span class="icon">💵</span> Record Payment</h3>
                         <form id="paymentForm">
                             <div class="form-group">
                                 <label>Amount</label>
@@ -361,7 +363,7 @@
                 <!-- Recent Payments Section -->
                 <div id="history" class="tab-pane">
                     <div class="card">
-                        <h2><span class="icon">📊</span> Recent Payments</h2>
+                        <h3><span class="icon">📊</span> Recent Payments</h3>
                         <div id="paymentsList"></div>
                     </div>
                 </div>
@@ -370,7 +372,7 @@
                 <div id="add-card" class="tab-pane">
                     <div id="addCardLanding">
                         <div class="card" style="text-align: center; padding: 48px 24px;">
-                            <h2><span class="icon">💳</span> Add a New Card</h2>
+                            <h3><span class="icon">💳</span> Add a New Card</h3>
                             <p class="description" style="margin-bottom: 32px;">Choose how you'd like to add a card to
                                 your wallet.</p>
 
@@ -403,7 +405,7 @@
                             ← Back to Options
                         </button>
                         <div class="card">
-                            <h2><span class="icon">✨</span> Create Custom Card Template</h2>
+                            <h3><span class="icon">✨</span> Create Custom Card Template</h3>
                             <p class="description">Define your card's rewards. This template will be saved to your
                                 library for future use.</p>
                             <form id="presetForm">
@@ -447,7 +449,7 @@
                 <!-- Show Presets (Library) Section -->
                 <div id="show-presets" class="tab-pane">
                     <div class="card">
-                        <h2><span class="icon">📚</span> Preset Library</h2>
+                        <h3><span class="icon">📚</span> Preset Library</h3>
                         <p class="description">Browse and add specialized cards to your wallet instantly.</p>
                         <div id="presetLibraryGrid" class="preset-grid">
                             <!-- Populated by main.js -->
@@ -458,7 +460,7 @@
                 <!-- My Wallet Section -->
                 <div id="my-cards" class="tab-pane">
                     <div class="card">
-                        <h2><span class="icon">🗂️</span> My Wallet</h2>
+                        <h3><span class="icon">🗂️</span> My Wallet</h3>
                         <div id="cardsList"></div>
                     </div>
                 </div>
@@ -466,7 +468,7 @@
                 <!-- Vault (Data Management) Section -->
                 <div id="vault" class="tab-pane">
                     <div class="card">
-                        <h2><span class="icon">⚙️</span> Settings & Data Vault</h2>
+                        <h3><span class="icon">⚙️</span> Settings & Data Vault</h3>
 
                         <div class="vault-section"
                             style="margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--border);">
